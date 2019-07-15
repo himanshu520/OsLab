@@ -1,0 +1,5 @@
+#!/bin/bash
+./expl ../Programs/module11/task4/numbers.expl
+mv assemblycode.xsm ../Programs/module11/task4/numbers.xsm
+./expl ../Programs/module11/task4/student.expl
+mv assemblycode.xsm ../Programs/module11/task4/student.xsm

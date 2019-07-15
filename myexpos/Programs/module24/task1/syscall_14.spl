@@ -1,0 +1,108 @@
+//interrupt routine 14 - semlock (19) and semunlock (20) syscall
+
+alias curProcess R0;
+alias curProcT R1;
+alias pageTable R2;
+alias userSP R10;
+alias syscallNumber R3;
+
+curProcess = [SYSTEM_STATUS_TABLE + 1];
+curProcT = PROCESS_TABLE + 16 * curProcess;
+pageTable = PAGE_TABLE_BASE + 20 * curProcess;
+userSP = SP;
+
+//switching to kernel stack and extracting the syscall number
+[curProcT + 13] = SP;
+SP = [curProcT + 11] * 512 - 1;
+syscallNumber = [[pageTable + 2 * (userSP - 5) / 512] * 512 + (userSP - 5) % 512];
+
+if(syscallNumber == 19) then
+    //semlock syscall
+
+    //setting the mode flag in the process table of the current process
+    [curProcT + 9] = 19;
+
+    //checking if the semaphore to be locked is valid
+    alias resourceTable R4;
+    alias resourceTableEntry R5;
+
+    resourceTable = ([curProcT + 11] + 1) * 512 - 16;
+    resourceTableEntry = [[pageTable + 2 * (userSP - 4) / 512] * 512 + (userSP - 4) % 512];
+    if(resourceTableEntry < 0 || resourceTableEntry > 7) then
+        [[pageTable + 2 * (userSP - 1) / 512] * 512 + (userSP - 1) % 512] = -1;
+    else
+        if([resourceTable + 2 * resourceTableEntry] != SEMAPHORE) then
+            [[pageTable + 2 * (userSP - 1) / 512] * 512 + (userSP - 1) % 512] = -1;
+        else
+            //now the resource table entry is for a valid semaphore
+
+            alias semaphoreEntry R6;
+            semaphoreEntry = [resourceTable + 2 * resourceTableEntry + 1];
+
+            //wait in a busy loop till the semaphore is acquired
+            while([SEMAPHORE_TABLE + 4 * semaphoreEntry + 1] != -1) do
+                multipush(R0, R1, R2, R3, R4, R5, R6, R10);
+                [curProcT + 4] = WAIT_SEMAPHORE;
+                [curProcT + 5] = semaphoreEntry;
+                call MOD_5;
+                multipop(R0, R1, R2, R3, R4, R5, R6, R10);
+            endwhile;
+
+            //the semaphore is now ready to be locked
+            [SEMAPHORE_TABLE + 4 * semaphoreEntry + 1] = curProcess;
+            [[pageTable + 2 * (userSP - 1) / 512] * 512 + (userSP - 1) % 512] = 0;
+        endif;
+    endif;
+endif;
+
+if(syscallNumber == 20) then
+    //semunlock syscall
+
+    //setting the mode flag in the process table of the current process
+    [curProcT + 9] = 20;
+
+    //checking if the semaphore to be locked is valid
+    alias resourceTable R4;
+    alias resourceTableEntry R5;
+
+    resourceTable = ([curProcT + 11] + 1) * 512 - 16;
+    resourceTableEntry = [[pageTable + 2 * (userSP - 4) / 512] * 512 + (userSP - 4) % 512];
+    if(resourceTableEntry < 0 || resourceTableEntry > 7) then
+        [[pageTable + 2 * (userSP - 1) / 512] * 512 + (userSP - 1) % 512] = -1;
+    else
+        if([resourceTable + 2 * resourceTableEntry] != SEMAPHORE) then
+            [[pageTable + 2 * (userSP - 1) / 512] * 512 + (userSP - 1) % 512] = -1;
+        else
+            //now the resource table entry is for a valid semaphore
+
+            alias semaphoreEntry R6;
+            semaphoreEntry = [resourceTable + 2 * resourceTableEntry + 1];
+            //check if the current process has locked the semaphore. If not return -2
+            if([SEMAPHORE_TABLE + semaphoreEntry * 4 + 1] != curProcess) then
+                [[pageTable + 2 * (userSP - 1) / 512] * 512 + (userSP - 1) % 512] = -2;
+            else
+                //loop through the process table and change the state of all the process waiting
+                //for the semaphore to be unlocked
+                alias ctr R7;
+                ctr = 0;
+                while(ctr < MAX_PROC_NUM) do
+                    if([PROCESS_TABLE + 16 * ctr + 4] == WAIT_SEMAPHORE &&
+                        [PROCESS_TABLE + 16 * ctr + 5] == semaphoreEntry) then
+                            [PROCESS_TABLE + 16 * ctr + 4] = READY;
+                    endif;
+                    ctr = ctr + 1;
+                endwhile;
+
+                //make the lockPID of the semaphore to be -1
+                [SEMAPHORE_TABLE + 4 * semaphoreEntry + 1] = -1;
+            endif;
+        endif;
+    endif;
+endif;
+
+
+//changing to user stack and also change the MODE flag
+[curProcT + 9] = 0;
+SP = [curProcT + 13];
+
+ireturn;

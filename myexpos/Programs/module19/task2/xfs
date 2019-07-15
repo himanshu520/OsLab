@@ -1,0 +1,24 @@
+#!/bin/bash
+./xfs-interface fdisk
+./xfs-interface load --os ../Programs/module19/task2/os_startup.xsm
+./xfs-interface load --init ../Programs/module19/task2/init.xsm
+./xfs-interface load --idle ../Programs/module19/task2/idle.xsm
+./xfs-interface load --library ../expl/library.lib
+./xfs-interface load --exhandler ../Programs/module19/task2/int_exhandler.xsm
+./xfs-interface load --int=timer ../Programs/module19/task2/int_timer.xsm
+./xfs-interface load --int=disk ../Programs/module19/task2/int_disk.xsm
+./xfs-interface load --int=console ../Programs/module19/task2/int_console.xsm
+./xfs-interface load --int=6 ../Programs/module19/task2/syscall_read.xsm
+./xfs-interface load --int=7 ../Programs/module19/task2/syscall_print.xsm
+./xfs-interface load --int=9 ../Programs/module19/task2/syscall_exec.xsm
+./xfs-interface load --int=10 ../Programs/module19/task2/syscall_exit.xsm
+./xfs-interface load --module 0 ../Programs/module19/task2/module_resource.xsm
+./xfs-interface load --module 1 ../Programs/module19/task2/module_process.xsm
+./xfs-interface load --module 2 ../Programs/module19/task2/module_memory.xsm
+./xfs-interface load --module 4 ../Programs/module19/task2/module_device.xsm
+./xfs-interface load --module 5 ../Programs/module19/task2/module_scheduler.xsm
+./xfs-interface load --module 7 ../Programs/module19/task2/module_boot.xsm
+./xfs-interface load --exec ../Programs/module19/task2/odd.xsm
+./xfs-interface load --exec ../Programs/module19/task2/linklist.xsm
+./xfs-interface dump --inodeusertable
+mv inodeusertable.txt ../Programs/module19/task2/inodeusertable.txt

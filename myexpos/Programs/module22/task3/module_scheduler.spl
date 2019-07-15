@@ -1,0 +1,78 @@
+//Scheduler module (module 5)
+
+//obtaining the current process and its process table
+alias curProcess R0;
+alias processTable R1;
+curProcess = [SYSTEM_STATUS_TABLE + 1];
+processTable = PROCESS_TABLE + 16 * curProcess;
+
+//saving the current base pointer
+SP = SP + 1;
+[SP] = BP;
+
+//saving the data of the current process in the process table for the context switch
+[processTable + 12] = SP % 512;
+[processTable + 14] = PTBR;
+[processTable + 15] = PTLR;
+
+//finding the new process to be scheduled
+alias iter R2;
+alias newProcess R5;
+if(curProcess == MAX_PROC_NUM - 1) then
+    iter = 0;
+else iter = curProcess + 1;
+endif;
+
+while(curProcess != iter) do
+    if(iter == 0) then
+        iter = iter + 1;
+        continue;
+    endif;
+    alias state R3;
+    state = [PROCESS_TABLE + 16 * iter + 4];
+    if(state == CREATED || state == READY) then
+        break;
+    endif;
+    if(iter + 1 == MAX_PROC_NUM) then
+        iter = 0;
+    else iter = iter + 1;
+    endif;
+endwhile;
+
+
+//if no process is found that can be executed, then the idle program is scheduled
+if(iter == curProcess) then
+    newProcess = 0;
+else newProcess = iter;
+endif;
+
+
+//process table entry of the new process
+alias newProcessTable R6;
+newProcessTable = PROCESS_TABLE + 16 * newProcess;
+//restoring data for the new process
+PTBR = [newProcessTable + 14];
+PTLR = [newProcessTable + 15];
+[SYSTEM_STATUS_TABLE + 1] = newProcess;
+
+
+//returning to the control to the new process/ timer
+if([newProcessTable + 4] == CREATED) then
+    //this returns the control to the newly created child process (using fork)
+
+    //storing the value on the top of the kernel stack in the BP register
+    BP = [[newProcessTable + 11] * 512];
+    SP = [newProcessTable + 13];
+    [newProcessTable + 4] = RUNNING;
+    [newProcessTable + 9] = 0;
+    ireturn;
+
+else
+    //this returns control timer interrupt for the porgrams that has been scheduled atleast once
+    [newProcessTable + 4] = RUNNING;
+    SP = [newProcessTable + 11] * 512 + [newProcessTable + 12];
+    BP = [SP];
+    SP = SP - 1;
+    return;
+
+endif;

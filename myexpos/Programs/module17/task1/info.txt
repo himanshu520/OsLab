@@ -1,0 +1,90 @@
+In this module, we will be learning about the implementation of exec system call - 'the program loader'.
+
+______________________________________________________________________________________________________________
+Exec syscall
+==============================================================================================================
+Exec takes a file name as input and checks whether it is a valid executable file adhering to XEXE format.
+If so, it destroys the invoking process, loads the executable from the disk to the memory and sets the
+program for execution as a process. The invoking process is terminated and the control is never returned
+to it.
+
+The program must be loaded in the disk before the machine starts and the inode index of the file could
+be obtained by going through the memory copy of the inode table. The inode table is loaded from the disk
+to memory by the boot module.
+
+Exec deallcoates the memory pages occupied by the invoking process by calling the Exit Process function in
+the process manager module (module 1), which also terminates the process. The newly created process has
+the same PID as the exiting process and uses the same page table and process table entry.
+
+Since, exec runs in kernel mode, it uses the kernel stack of the exiting process. The Exit process function
+releases the user area page of the process, but this page is reclaimed by exec. The exec also acquire
+other pages as needed for the new process by calling GetFreePage function in the memory manager module
+(module 2). The page table is also updated for the changes. The code for the new process is also loaded
+(using loadi). Finally, the stack top is loaded with the address of the first instruction for the process
+and the new process begins its execution.
+
+
+______________________________________________________________________________________________________________
+Memory Free List
+==============================================================================================================
+Memory free list is used for keeping track of used and unused pages in the memory. It contains MAX_MEM_PAGE
+(128) entries (one corresponding to each page) and each entry is of one word. The memory free list entry
+corresponding to a page shows the number of processes sharing this page. For an unallocated page, this entry
+is 0 and for a page that is allocated to the kernel this is 1.
+This list is present in page 57 of the memory and its address can be referred to by using constant
+MEMORY_FREE_LIST.
+
+
+
+______________________________________________________________________________________________________________
+Overall control flow
+==============================================================================================================
+ExitProcess (function number - 3, process manager module (1))
+    This is the first function invoked by the exec syscall. It takes the PID of a process as an input (here
+    current PID is passed), then it calls FreePageTable function in the same module to deallocate the pages of
+    the process (in the page table) and FreeUserAreaPage to deallocate the user area page of the process.
+    The state of the process is also set to terminated.
+
+FreePageTable (function number - 4, process manager module (1))
+    This also take the PID of a process as an input and frees the pages (according to valid entries in the page
+    table) of the process by calling ReleasePage function in the memory manager module (module 2).
+    Take care not to invoke release page for the library since this is shared by all the processes. It also
+    invalidates the page table entries corresponding to the pages.
+
+FreeUserAreaPage (function number - 2, process manager module (1))
+    This also takes the PID of a process as an input and frees the user area page of the process (using the
+    process table entry correspoding to the process) using ReleasePage function of the memory manager module(2).
+    However one thing to notice here is that the same user area page holds the kernel stack of the current
+    process that also contains the return address for the RealeasePage function. However, releasing the page
+    doesn't delete the contains in it and the ReleasePage function is non blocking so there is also no
+    danger of the page being allocated to some other process. Hence this step is safe.
+
+ReleasePage (function number - 2, memory manager module (2))
+    The ReleasePage function does quite some tasks. It takes the page to be released as an argument and
+    decrease its count in the memory free list. We don't play with the contents of the page as this might
+    be shared by other process. Secondly, if the memory free list entry of the page becomes 0, the function
+    increases MEM_FREE_COUNT in the system status table which keeps track of the free memory pages. And if
+    there are some processes in the WAIT_MEM state, then it also sets them to READY state.
+
+GetFreePage (function number - 1, memory manager module (2))
+    To acquire pages for the new process, exec calls GetFreePage function that searches through memory free
+    list to find a free page. If a page is found, then its page number is returned and the corresponding
+    entry in the memory free list is incremented by 1.
+    However, if no free memory page is available (MEM_FREE_COUNT is 0), then the process is set to WAIT_MEM
+    state and the scheduler is invoked. The process is scheduled once again when the memory is available.
+    WAIT_MEM_COUNT in the system status table stores the number of processes waiting for memory. This value
+    is also incremented before setting the process state as WAIT_MEM.
+
+
+______________________________________________________________________________________________________________
+InodeTable
+==============================================================================================================
+Inode table has an entry for each file in the disk. Inode table is stored in the disk but a copy of it is
+also available in the memory when the OS is running. It contains MAX_FILE_NUM (= 60) entries.
+The inode table entry correspoding to each file stores the name, type, size and data block numbers of the file.
+Each file can be present in MAX_FILE_BLOCKS (= 4) blocks atmost. Each inode table entry contains 16 words.
+The first entry is reserved for the root file.
+The first three entries are (file type, name, size), each of one word. The disk blocks corresponding to the
+file are stored in word 8, 9, 10 and 11.
+Memory copy of inodetable is stored in page 59 and can be referred to by SPL constant INODE_TABLE.
+A free inode table entry is denoted by storing '-1' for the filename entry.

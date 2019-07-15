@@ -1,0 +1,73 @@
+//Process manager module (module 1)
+
+alias functionNum R1;
+alias currentPID R2;
+
+if(functionNum == 2) then
+    //FreeUserAreaPage function
+
+    //finding the page number of the user area page to be freed
+    alias userAreaPage R3;
+    userAreaPage = [PROCESS_TABLE + currentPID * 16 + 11];
+
+    //calling ReleasePage function (2) in the memory manager module (2)
+    functionNum = 2;
+    R2 = R3;
+    call MOD_2;
+    return;
+
+
+else if(functionNum == 3) then
+    //ExitProcess function
+
+    //calling FreePageTable function
+    functionNum = 4;
+    call MOD_1;
+
+    //calling FreeUserAreaPage function
+    functionNum =  2;
+    call MOD_1;
+
+    //setting the process state as terminated
+    [PROCESS_TABLE + 16 * currentPID + 4] = TERMINATED;
+
+    return;
+
+
+else if(functionNum == 4) then
+    //FreePageTable function
+
+    //set the page table entries corresponding to the library as -1
+    alias currentPT R3;
+    currentPT = PAGE_TABLE_BASE + currentPID * 20;
+
+    [currentPT + 0] = -1;
+    [currentPT + 1] = "0000";
+    [currentPT + 2] = -1;
+    [currentPT + 3] = "0000";
+
+    alias counter R4;
+    counter = 4;
+
+    while(counter < 20) do
+        if([currentPT + counter] == -1) then
+        	counter = counter + 2;
+            continue;
+        endif;
+        multipush(R1, R2, R3, R4);
+
+        //calling ReleasePage function (2) in the memory manager module (2)
+        functionNum = 2;
+        R2 = [currentPT + counter];
+        call MOD_2;
+        multipop(R1, R2, R3, R4);
+        [currentPT + counter + 1] = "0000";
+
+        counter = counter + 2;
+    endwhile;
+
+    return;
+
+endif;
+endif;
+endif;

@@ -1,0 +1,4 @@
+#!/bin/bash
+./spl ../Programs/module9/task2/os_startup.spl
+./spl ../Programs/module9/task2/timer.spl
+./spl ../Programs/module9/task2/haltprog.spl

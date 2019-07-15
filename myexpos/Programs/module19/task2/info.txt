@@ -1,0 +1,86 @@
+In this module, we will be learning about the implementation of the disk interrupt handler. We will implement
+disk interrupt handler, AcquireDisk function in the resource manager module and LoadDisk function in the
+device manager module.
+
+______________________________________________________________________________________________________________
+Exception Handling
+==============================================================================================================
+If a program running in user mode contains an illegal instruction then the machine must not halt, otherwise
+a user program will be able to halt the whole machine. So, we need an privelged mode exception handling
+routine that handles such cases. The most obvious solution is to terminate that program by printing the
+cause of the error, and schedule other program. However, in case of page fault this won't be the case,
+instead we would load the desired page in the memory and then reschedule the program. )
+
+Following exceptions are possible -
+    * Page fault
+    * Illegal instruction
+    * Illegal memory access
+    * Arithematic exception
+
+Page fault helps us to implement demand paging (lazy allocation). It means that the pages required by a
+program are loaded in the memory only when it is requested by the program. This helps us to save memory
+and run more programs than is physically possible. Also note that page fault occurs only for heap and
+code pages. Also, the OS must place the EIP value on the top of the stack so that the process that
+halted because of page fault can continue its normal execution.
+
+The following registers can be used to get to the cause of the exception -
+    * EIP - The logical address of the instruction that caused the exception to occur
+    * EC - The cause of the exception (0 to 3, respectively as mentioned above)
+    * EMA - The contents of this register is relevant only in the case of illegal memory access (access to
+                an address outside the logical address of the program or a write attempt to read only
+                location). This register contains the memory address which was tried to be accessed.
+    * EPN - The contents of this register is valid only in the case of a page fault. The logical page number
+                that caused the exception to occur.
+
+
+The exception handler is present in the memory pages 2 and 3 and in the disk blocks 15 and 16.
+
+______________________________________________________________________________________________________________
+Disk map table
+==============================================================================================================
+Each process has a table called the per-process disk map table. It stores the disk block numbers
+corresponding to the memory pages used by the user process. Each disk map table has 10 words - 1 for
+user area page, 2 for stack, 2 for heap, 4 for code. One word is unused. Whenever some copy of a
+memory page of a process is stored in the disk, that entry is kept in the disk map table to keep
+track of all the copies of the pages that exists.
+
+The SPL constant DISK_MAP_TABLE points to the start of the disk map table that corresponds to the disk
+map table of process 0.
+
+In this stage, we will modify the exec system call to also update the disk map table of the newly
+created process. We will update the entries corresponding to the code blocks of the new process. The
+remaining entries are set to -1.
+
+Reference - http://exposnitc.github.io/os_design-files/process_table.html#disk_map_table
+
+______________________________________________________________________________________________________________
+GetCodePage function
+==============================================================================================================
+GetCodePage function (5) (from memory manager module (2)) takes block number corresponding to a single
+code block and loads that into the memory. Usually code pages are shared by processes running the same
+program. The purpose of this function is to go through the disk map table and check whether this block
+is being used by some other process. If so, it checks the page table entry of that process to see if
+that block has already been loaded in some memory page. If yes, it simply returns the memory page number.
+If not, a memory page is allocated using GetFreePage function (1) from the memory manager module (2).
+This is followed by loading the code block in the memory using DiskLoad function (2) in the device manager
+module (4). It finally returns the memory page number in which the code was loaded.
+
+______________________________________________________________________________________________________________
+FreePageTable function
+==============================================================================================================
+FreePageTable function (4) of process manager module (1), decrements the memory free list count of the
+pages acquired by a process.
+If some stack/heap is swapped in the disk, the reference count of the correspoding disk block is decremented
+in the disk free list (note that currently we don't allocate heap/stack pages in the disk - however this
+will be used in the later stages).
+
+In later stages we find that when OS runs out of space, allocates some disk blocks and swaps the heap/stack
+pages of a process to claim memory. In this case the page table entry is invalidated and the correspoding
+entry in the disk map table is updated to contain the block number to which the swap was made. The disk free
+list entry of that block is also updated.
+
+When the page table entries of a process are being invalidated in the FreePageTable function (when a process
+exits or the current process is replaced using exec syscall), care must be taken to also release the
+temporary disk block allocated to the process. The free page table function checks whether the disk map
+table entry of a stack/heap page contains a valid disk block number, and if so decrements its disk free list
+entry by invoking the Release Block function (4) of the memory manager module (2).

@@ -1,0 +1,82 @@
+In this module we will implement multiuser feature to eXpOS.
+
+NOTE - The init process of eXpOS is login process.
+______________________________________________________________________________________________________________
+Multiuser
+==============================================================================================================
+eXpOS allows maximum of MAX_USER_NUM (16) users, each alloted a unique user id. Each process is also
+associated with a user. During bootstrap OS creates two processes - idle and login and assigns them
+user id 0 (corresponding to kernel). Hence these are also called kernel processes. Login process is scheduled
+for execution after bootstrap.
+
+Login process -
+Login process accepts username and password (strings) and invoke login syscall (only login process can invoke
+login syscall). Login process verifies the user and creates a shell process. The shell is given the userid of
+the logged in user. Login process then goes to sleep and wakes up only after logout syscall. During logout
+all the running processes of the previous user are terminated.
+
+Root and Kernel User -
+Two special users root (userid 1) and kernel (userid 0) are defined by eXpOS itself. Root is the user
+with administrator privileges and it is the only user which can invoke shutdown syscall. Similarly, syscall
+to add (newusr) and remove users (remusr) can be made only by the root user.
+
+A user can change his password using setpwd syscall which takes username and password as arguments. A user
+other than the root can only change his/her own password. Root, on the other hand can change the password
+of anyone including its own.
+
+Getuid and Getuname syscalls gives userid and username respectively.
+
+______________________________________________________________________________________________________________
+User Table
+==============================================================================================================
+User table is stored in disk block 4 at the end after the inode table. There are a total of 16 entries with
+each entry storing username and (encrypted) user password. Userid is the index of the user in the user table.
+The XSM machine instruction ENCRYPT is used to convert text form to an encrypted form. We can correspondingly
+use encrypt SPL command.
+
+Fdisk command of xfs-interface already initializes the user table with entries for root and kernel. Kernel
+is non-loggable user and root is assigned a default password of "root" (without quotes) (the entry in the
+user table will be in encrypted form).
+
+In the memory the user table is loaded in the memory page 60.
+
+Read about login and shell process from below link.
+
+Reference - http://exposnitc.github.io/Tutorials/multiuser_implementation.html
+
+
+______________________________________________________________________________________________________________
+Login Syscall (syscall number 27 in interrupt routine 17)
+==============================================================================================================
+Login syscall can only be invoked from login process. It takes username and password as arguments and
+try to match the pair with an entry in the user table. If an entry is found it sets the shell process (pid 2)
+to run with userid corresponding to the index of the username in the usertable. Even though the shell
+is not created through fork and exec from the login process, login process is considered the parent of
+the shell process. After that login process waits for the shell process to terminate and then allows
+other user to login.
+
+______________________________________________________________________________________________________________
+Logout syscall (syscall number 28 in interrupt routine 12)
+==============================================================================================================
+Logout syscall can only be invoked from the shell process (pid 2) of a user. It terminates all the
+non-terminated processes by calling killAll function (5) of the process manager module (1). KillAll function
+terminates all the processes except idle, init (or login) and the current process.
+Logout syscall changes the state of the current (shell) process to TERMINATED. The IP of the first instruction
+of the shell process is stored at the beginning of the stack so that next time when a user logs in
+the shell is run as a newly created process.
+Finally, the login process is made ready and the scheduler is invoked.
+
+
+______________________________________________________________________________________________________________
+Other syscalls
+==============================================================================================================
+Newusr syscall (syscall number 22 in interrupt routine 16)
+    It can only be invoked from the shell process of the root user.
+
+Remusr syscall (syscall number 23 in interrupt routine 17)
+    It can also be invoked from the shell process of the root user. Root and kernel users can't be removed.
+    Also a user who is the owner of a file in the system cannot be removed.
+
+Setpwd syscall (syscall number 24 in interrupt routine 17)
+    This syscall can be called by any user from its shell process to change its own login password. The
+    root user has the privelege to change the password of any other user (except kernel).

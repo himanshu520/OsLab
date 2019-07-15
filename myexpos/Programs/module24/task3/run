@@ -1,0 +1,92 @@
+#!/bin/bash
+
+cd ../../../spl/
+
+./spl ../Programs/module24/task3/haltprog.spl
+./spl ../Programs/module24/task3/int_console.spl
+./spl ../Programs/module24/task3/int_disk.spl
+./spl ../Programs/module24/task3/int_timer.spl
+./spl ../Programs/module24/task3/int_exhandler.spl
+./spl ../Programs/module24/task3/module_boot.spl
+./spl ../Programs/module24/task3/module_process.spl
+./spl ../Programs/module24/task3/module_memory.spl
+./spl ../Programs/module24/task3/module_file.spl
+./spl ../Programs/module24/task3/module_device.spl
+./spl ../Programs/module24/task3/module_resource.spl
+./spl ../Programs/module24/task3/module_scheduler.spl
+./spl ../Programs/module24/task3/os_startup.spl
+./spl ../Programs/module24/task3/syscall_exit.spl
+./spl ../Programs/module24/task3/syscall_print.spl
+./spl ../Programs/module24/task3/syscall_read.spl
+./spl ../Programs/module24/task3/syscall_exec.spl
+./spl ../Programs/module24/task3/syscall_fork.spl
+./spl ../Programs/module24/task3/syscall_4.spl
+./spl ../Programs/module24/task3/syscall_5.spl
+./spl ../Programs/module24/task3/syscall_11.spl
+./spl ../Programs/module24/task3/syscall_13.spl
+./spl ../Programs/module24/task3/syscall_14.spl
+./spl ../Programs/module24/task3/syscall_shutdown.spl
+
+echo "==================SPL Compilation done==================="
+
+
+
+cd ../expl/
+
+./expl ../Programs/module24/task3/idle.expl
+mv assemblycode.xsm ../Programs/module24/task3/idle.xsm
+./expl ../Programs/module24/task3/init.expl
+mv assemblycode.xsm ../Programs/module24/task3/init.xsm
+./expl ../Programs/module24/task3/lseek.expl
+mv assemblycode.xsm ../Programs/module24/task3/lseek.xsm
+
+echo "==================EXPL Compilation done=================="
+
+
+
+cd ../xfs-interface/
+
+./xfs-interface fdisk
+./xfs-interface load --os ../Programs/module24/task3/os_startup.xsm
+./xfs-interface load --init ../Programs/module24/task3/init.xsm
+./xfs-interface load --idle ../Programs/module24/task3/idle.xsm
+./xfs-interface load --library ../expl/library.lib
+./xfs-interface load --exhandler ../Programs/module24/task3/int_exhandler.xsm
+./xfs-interface load --int=timer ../Programs/module24/task3/int_timer.xsm
+./xfs-interface load --int=disk ../Programs/module24/task3/int_disk.xsm
+./xfs-interface load --int=console ../Programs/module24/task3/int_console.xsm
+./xfs-interface load --int=4 ../Programs/module24/task3/syscall_4.xsm
+./xfs-interface load --int=5 ../Programs/module24/task3/syscall_5.xsm
+./xfs-interface load --int=6 ../Programs/module24/task3/syscall_read.xsm
+./xfs-interface load --int=7 ../Programs/module24/task3/syscall_print.xsm
+./xfs-interface load --int=8 ../Programs/module24/task3/syscall_fork.xsm
+./xfs-interface load --int=9 ../Programs/module24/task3/syscall_exec.xsm
+./xfs-interface load --int=10 ../Programs/module24/task3/syscall_exit.xsm
+./xfs-interface load --int=11 ../Programs/module24/task3/syscall_11.xsm
+./xfs-interface load --int=13 ../Programs/module24/task3/syscall_13.xsm
+./xfs-interface load --int=14 ../Programs/module24/task3/syscall_14.xsm
+./xfs-interface load --int=15 ../Programs/module24/task3/syscall_shutdown.xsm
+./xfs-interface load --module 0 ../Programs/module24/task3/module_resource.xsm
+./xfs-interface load --module 1 ../Programs/module24/task3/module_process.xsm
+./xfs-interface load --module 2 ../Programs/module24/task3/module_memory.xsm
+./xfs-interface load --module 3 ../Programs/module24/task3/module_file.xsm
+./xfs-interface load --module 4 ../Programs/module24/task3/module_device.xsm
+./xfs-interface load --module 5 ../Programs/module24/task3/module_scheduler.xsm
+./xfs-interface load --module 7 ../Programs/module24/task3/module_boot.xsm
+./xfs-interface load --exec ../Programs/module24/task3/lseek.xsm
+./xfs-interface load --data ../Programs/module24/task3/sample.dat
+./xfs-interface load --data ../Programs/module24/task3/numbers.dat
+
+echo "======================Files loaded======================="
+
+
+
+cd ../xsm/ && ./xsm --timer 1024
+
+cd ../xfs-interface/
+./xfs-interface dump --inodeusertable
+mv inodeusertable.txt ../Programs/module24/task3/inodeusertable.txt
+./xfs-interface dump --rootfile
+mv rootfile.txt ../Programs/module24/task3/rootfile.txt
+
+cd ../Programs/module24/task3/

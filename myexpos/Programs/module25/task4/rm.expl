@@ -1,0 +1,21 @@
+int main() {
+    decl
+        int ignore;
+        str out, filename;
+    enddecl
+
+    begin
+        out = "Filename";
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Read", -1, filename);
+        ignore = exposcall("Delete", filename);
+        if(ignore < 0) then
+            out = "Error";
+        else
+            out = "Deleted";
+        endif;
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Write", -2, " ");
+        return 0;
+    end
+}

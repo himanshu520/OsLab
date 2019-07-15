@@ -1,0 +1,80 @@
+//Scheduler module (module 5)
+
+//obtaining the current process and its process table
+alias curProcess R0;
+alias processTable R1;
+alias nextProc R2;
+curProcess = [SYSTEM_STATUS_TABLE + 1];
+processTable = PROCESS_TABLE + 16 * curProcess;
+
+//saving the current base pointer on the top of the kernel stack
+multipush(BP);
+
+//saving the data of the current process in the process table for the context switch
+[processTable + 12] = SP % 512;
+[processTable + 14] = PTBR;
+[processTable + 15] = PTLR;
+
+//finding the new process to be scheduled
+nextProc = [SYSTEM_STATUS_TABLE + 5];       //initially choose paging process as the next process
+if(nextProc != -1) then
+    //if there is really an ongoing paging process
+    if([PROCESS_TABLE + 16 * nextProc + 4] != READY) then
+        //if the paging process is not ready then choose IDLE process for scheduling
+        nextProc = 0;
+    endif;
+else
+    //if there is no current ongoing paging process, find the next non-swapped process for scheduling
+    //using round-robin algorithm
+    alias ctr R3;
+    ctr = 0;
+    nextProc = (curProcess + 1) % (MAX_PROC_NUM);
+    while(ctr < MAX_PROC_NUM) do
+        ctr = ctr + 1;
+        if(nextProc == 0) then
+            nextProc = 1;
+            continue;
+        endif;
+        alias procT R4;
+        procT = PROCESS_TABLE + 16 * nextProc;
+        if(([procT + 4] == READY || [procT + 4] == CREATED) && [procT + 6] != 1) then
+            break;
+        endif;
+        nextProc = (nextProc + 1) % (MAX_PROC_NUM);
+    endwhile;
+
+    if(ctr == MAX_PROC_NUM) then
+        if([processTable + 4] == READY) then
+            nextProc = curProcess;
+        else
+            nextProc = 0;
+        endif;
+    endif;
+endif;
+
+//process table entry of the new process
+alias newProcessTable R4;
+newProcessTable = PROCESS_TABLE + 16 * nextProc;
+
+//restoring data for the new process
+PTBR = [newProcessTable + 14];
+PTLR = [newProcessTable + 15];
+[SYSTEM_STATUS_TABLE + 1] = nextProc;
+
+//returning to the control to the new process/ timer
+if([newProcessTable + 4] == CREATED) then
+    //this returns the control to the newly created child process (using fork)
+
+    //storing the value from the top of the kernel stack in the BP register, and setting the user SP
+    //from the process table. Also changing the process state and mode
+    BP = [[newProcessTable + 11] * 512];
+    SP = [newProcessTable + 13];
+    [newProcessTable + 4] = RUNNING;
+    [newProcessTable + 9] = 0;
+    ireturn;
+else
+    [newProcessTable + 4] = RUNNING;
+    SP = [newProcessTable + 11] * 512 + [newProcessTable + 12];
+    multipop(BP);
+    return;
+endif;

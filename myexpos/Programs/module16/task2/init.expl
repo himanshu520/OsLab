@@ -1,0 +1,44 @@
+decl
+    int arr[20];
+enddecl
+
+int main() {
+    decl
+        int n, ctr, cnt, ignore;
+        str out;
+    enddecl
+    begin
+        out = "N";
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Read", -1, n);
+        out = "Numbers";
+        ignore = exposcall("Write", -2, out);
+        ctr = 0;
+        while(ctr < n) do
+            ignore = exposcall("Read", -1, cnt);
+            arr[ctr] = cnt;
+            ctr = ctr + 1;
+        endwhile;
+        ctr = 0;
+        while(ctr < n) do
+            cnt = 0;
+            while(cnt < (n - 1)) do
+                if(arr[cnt] > arr[cnt + 1]) then
+                    ignore = arr[cnt];
+                    arr[cnt] = arr[cnt + 1];
+                    arr[cnt + 1] = ignore;
+                endif;
+                cnt = cnt + 1;
+            endwhile;
+            ctr = ctr + 1;
+        endwhile;
+        out = "After sort";
+        ignore = exposcall("Write", -2, out);
+        ctr = 0;
+        while(ctr < n) do
+            ignore = exposcall("Write", -2, arr[ctr]);
+            ctr = ctr + 1;
+        endwhile;
+        return 0;
+    end
+}

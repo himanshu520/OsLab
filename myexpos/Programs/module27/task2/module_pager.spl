@@ -1,0 +1,248 @@
+//pager module (module 6)
+
+alias bpNum R0;
+alias functionNum R1;
+alias curPID R2;
+alias toSwap R3;
+alias toRel R4;
+alias ctr R10;
+alias procT R11;
+alias pageT R12;
+alias curTick R13;
+curPID = [SYSTEM_STATUS_TABLE + 1];
+
+if(functionNum == 1) then
+	//SwapOut function
+
+	//setting the current process as the paging process in the system status table (this will be used by
+	//the scheduler, which will schedule only this and the idle process during paging)
+	[SYSTEM_STATUS_TABLE + 5] = curPID;
+
+	//choosing a process to swap out (other than shell, idle and init)
+	toSwap = -1;
+
+	ctr = 3;
+	while(ctr < MAX_PROC_NUM) do
+		//finding a process that is not swapped and is in WAIT_PROCESS state
+		procT = PROCESS_TABLE + 16 * ctr;
+		if([procT + 4] == WAIT_PROCESS && [procT + 6] == 0) then
+			toSwap = ctr;
+			break;
+		endif;
+		ctr = ctr + 1;
+	endwhile;
+
+	if(toSwap == -1) then
+		ctr = 3;
+		//if no process is found in the previous search, finding a process that is not swapped and is in WAIT_TERMINAL state
+		while(ctr < MAX_PROC_NUM) do
+			procT = PROCESS_TABLE + 16 * ctr;
+			if([procT + 4] == WAIT_TERMINAL && [procT + 6] == 0) then
+				toSwap = ctr;
+				break;
+			endif;
+			ctr = ctr + 1;
+		endwhile;
+	endif;
+
+	if(toSwap == -1) then
+		ctr = 3;
+		curTick = -1;
+		//if no process is found in the previous two search, finding a process with highest TICK that is not swapped and is not
+		//in RUNNING, TERMINATED, ALLOCATED states.
+		while(ctr < MAX_PROC_NUM) do
+			procT = PROCESS_TABLE + 16 * ctr;
+			if([procT + 4] != RUNNING && [procT + 4] != ALLOCATED && [procT + 4] != TERMINATED && [procT + 6] == 0 && [procT] > curTick) then
+				toSwap = ctr;
+				curTick = [procT];
+			endif;
+			ctr = ctr + 1;
+		endwhile;
+	endif;
+
+	//if no process to swap is found return, after setting the paging process back to zero in the system status table
+	if(toSwap == -1) then
+		[SYSTEM_STATUS_TABLE + 5] = -1;
+		return;
+	endif;
+
+	//setting the TICK field in the process table of the process being swapped to 0
+	procT = PROCESS_TABLE + 16 * toSwap;
+	pageT = PAGE_TABLE_BASE + 20 * toSwap;
+	[procT] = 0;
+
+	//swapping valid heap/user stack/kernel stack pages that are not being shared to the disk
+	//also releasing the pages acquired by the heap/user stack/kernel stack and updating the
+	//corresponding data structures
+	ctr = 0;
+	while(ctr < 10) do
+		//finding the page to be released
+		if(ctr == 0) then
+			toRel = procT + 11;
+		else
+			if(ctr != 1) then
+				toRel = pageT + 2 * ctr;
+			else
+				ctr = 2;
+				continue;
+			endif;
+		endif;
+
+		//if the page to be swapped is not valid or is a heap page that is being shared then
+		//it is not swapped
+		if([toRel] == -1 || ((ctr > 1 && ctr < 4) && ([MEMORY_FREE_LIST + [toRel]] != 1))) then
+			ctr = ctr + 1;
+			continue;
+		endif;
+
+		//code blocks needn't be swapped, because they are already in the disk.
+		//so if the page is not a code page then swap it to the disk and update the data structures
+		if(ctr < 4 || ctr > 7) then
+			//getting a free swap block by calling GetSwapBlock (6) function of the memory manager module (2)
+			multipush(R2, R3, R4, R10, R11, R12);
+			functionNum = 6;
+			call MOD_2;
+			multipop(R2, R3, R4, R10, R11, R12);
+
+			//storing the freeBlock number returned in the disk map table of the process
+			[DISK_MAP_TABLE + 10 * toSwap + ctr] = bpNum;
+
+			//calling the diskStore function (1) of the device manager module (4) to swap the page in the disk
+			multipush(R2, R3, R4, R10, R11, R12);
+			functionNum = 1;
+			//R2 already stores the current PID
+			R3 = [toRel];
+			R4 = bpNum;
+			call MOD_4;
+			multipop(R2, R3, R4, R10, R11, R12);
+		endif;
+
+		//calling releasePage function (2) of the memory manager module (2) to free the memory page
+		multipush(R2, R3, R4, R10, R11, R12);
+		functionNum = 2;
+		R2 = [toRel];
+		call MOD_2;
+		multipop(R2, R3, R4, R10, R11, R12);
+
+		//invalidating the page table/process table entries
+		[toRel] = -1;
+		if(ctr != 0) then
+			[toRel + 1] = "0000";
+		endif;
+		ctr = ctr + 1;
+	endwhile;
+
+	//setting the swap flag in the process table of the current process to be 1
+	[procT + 6] = 1;
+
+	//incrementing the swap count in the system status table and also set the paging process back to -1
+	[SYSTEM_STATUS_TABLE + 4] = [SYSTEM_STATUS_TABLE + 4] + 1;
+	[SYSTEM_STATUS_TABLE + 5] = -1;
+	return;
+endif;
+
+
+if(functionNum == 2) then
+	//SwapIn function
+
+	//if there are no swapped out process return
+	if([SYSTEM_STATUS_TABLE + 4] == 0) then
+		return;
+	endif;
+
+	//setting the current process as the paging process in the system status table (this will be used by
+	//the scheduler, which will schedule only this and the idle process during paging)
+	[SYSTEM_STATUS_TABLE + 5] = curPID;
+
+	//finding a swapped process with highest TICK
+	curTick = -1;
+	toSwap = -1;
+	ctr = 0;
+	while(ctr < MAX_PROC_NUM) do
+		procT = PROCESS_TABLE + 16 * ctr;
+		if([procT + 6] == 1 && [procT + 4] == READY && [procT] > curTick) then
+			curTick = [procT];
+			toSwap = ctr;
+		endif;
+		ctr = ctr + 1;
+	endwhile;
+
+	if(toSwap == -1) then
+		//if no process to swap is found then return -1, after resetting the swapping process
+		[SYSTEM_STATUS_TABLE + 5] = -1;
+		return;
+	endif;
+
+	procT = PROCESS_TABLE + 16 * toSwap;
+	pageT = PAGE_TABLE_BASE + 20 * toSwap;
+
+	//setting the TICK field in the selected process to 0
+	[procT] = 0;
+
+	//swapping in, swapped out pages
+	alias diskMapTable R15;
+	diskMapTable = DISK_MAP_TABLE + 10 * toSwap;
+	ctr = 0;
+
+	while(ctr < 10) do
+		//the code pages would not be swapped in and will be dealt with by the exception handler
+		if(ctr < 4 || ctr > 7) then
+			toRel = diskMapTable + ctr;
+		else
+			ctr = ctr + 1;
+			continue;
+		endif;
+
+		//if the page to be swapped in is not valid continue
+		if([toRel] == -1) then
+			ctr = ctr + 1;
+			continue;
+		endif;
+
+		//getting a free page by calling GetFreePage (1) function of the memory manager module (2)
+		multipush(R2, R4, R10, R11, R12, R15);
+		functionNum = 1;
+		call MOD_2;
+		multipop(R2, R4, R10, R11, R12, R15);
+
+		//calling the diskLoad function (2) of the device manager module (4) to swap in the page from the disk
+		multipush(R0, R2, R4, R10, R11, R12, R15);
+		functionNum = 2;
+		//R2 already stores the current PID
+		R3 = bpNum;
+		R4 = [toRel];
+		call MOD_4;
+		multipop(R0, R2, R4, R10, R11, R12, R15);
+
+		//calling releaseBlock function (4) of the memory manager module (2) to free the memory block
+		multipush(R0, R2, R4, R10, R11, R12, R15);
+		functionNum = 4;
+		//R2 already has current PID
+		R3 = [toRel];
+		call MOD_2;
+		multipop(R0, R2, R4, R10, R11, R12, R15);
+
+		//invalidating the disk map table entry
+		[toRel] = -1;
+
+		//updating the page table/process table entry
+		if(ctr > 1) then
+			[pageT + 2 * ctr] = bpNum;
+			[pageT + 2 * ctr + 1] = "0110";
+		else
+			[procT + 11] = bpNum;		//ctr = 1 is not possible here
+		endif;
+
+		ctr = ctr + 1;
+	endwhile;
+
+	//setting the swap flag in the process table of the current process to be 0
+	[procT + 6] = 0;
+
+	//incrementing the swap count in the system status table and also set the paging process back to -1
+	[SYSTEM_STATUS_TABLE + 4] = [SYSTEM_STATUS_TABLE + 4] + 1;
+	[SYSTEM_STATUS_TABLE + 5] = -1;
+
+	return;
+endif;
+

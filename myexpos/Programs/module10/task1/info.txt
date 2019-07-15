@@ -1,0 +1,86 @@
+An interrupt handler may contain code for several system calls. (For example, in the eXpOS implementation on
+XSM, the routines for create and delete system calls are coded inside the INT 4 handler). To identify the
+correct routine, the OS assigns a unique system call number to each system call routine. To invoke a system
+call from a program, the program must pass the system call number (along with other arguments to the system
+call) and invoke the corresponding software interrupt using the INT instruction. The arguments and the system
+call number are passed through the user program's stack.
+
+
+_______________________________________________________________________________________________________________________
+The following are the sequence of instructions that are executed when a user program requests a OS service routine -
+
+The sequence of actions performed by the user program during INT instructions are -
+    *   Save its register context in the stack
+    *   Push syscall number in the stack
+    *   Push syscall arguments (3 in total) in the stack
+    *   Push an empty space for the return value
+    *   Execute the INT instruction
+Note that XSM machine pushes the value of IP + 2, onto the user stack upon execution of the INT instruction
+
+
+
+
+The sequence of actions performed by the System call service routine -
+    *   Extract the system call number and arguments from the user stack
+    *   Set the MODE flag in the process table for the process to the system call number
+    *   Switch to kernel stack
+    *   Identify system call using system call number and transfer the control to the appropriate system call code
+
+
+
+
+The sequence of actions performed by the system call service routine while returning from the system call is -
+    *   Store the return value back in the user stack
+    *   Set the SP to the top of the user stack
+    *   Set the MODE flag in the process table for the process to 0
+    *   Execute return using IRET
+
+
+
+
+Steps performed by the process on return from the system call
+    *   Extract the return value
+    *   Pop off the passed arguments and the system call number from the stack
+    *   Restore the register context
+
+
+
+_______________________________________________________________________________________________________________________
+Now, we have two stacks in the memory. But we would also need some data structure to store the two SP values
+as the system has only one SP register. For this we would use Process Table.
+
+The process table has an entry for each running process and contains the info about the running process. The
+process table entry for a process is created when the process is created using FORK syscall. Each entry is of
+16 bytes. The following list shows the entries of the process table and corresponding byte numbers -
+        PID - 1,                PPID - 2
+        MODE FLAG - 9,          User Area Page Number - 11
+        KPTR - 12,              UPTR - 13
+        PTBR - 14,              PTLR - 15
+Here in eXpOS, PID is same as the index of the process in the process table.
+MODE FLAG is set to syscall number during a syscall, -1 during interrupt service routine otherwise is 0.
+KPTR stores the offset of the kernel stack pointer from the start of the user area page.
+
+
+
+
+_______________________________________________________________________________________________________________________
+Here we will implement interrupt service routine for printing on the console. This is programmed inside INT 7
+handler and corresponds to system call number 5.
+
+First, we will save the required registers on the stack. Then push 5 on the stack for interrupt routine.
+Any interrupt service routine will accept 3 parameter. Here the console write service routine requires only
+2 arguments, the first is the file descriptor which is -2 for the console, the second is the argument to be
+printed. We can push any register as the third argument on the stack, because its value doesn't matter.
+Finally, we will push any register on the stack - this place will hold the return value.
+
+Finally on return we pop out the pushed values (we don't require the return value from the system call). We
+also restore the register context.
+
+
+_______________________________________________________________________________________________________________________
+References -
+    http://exposnitc.github.io/Roadmap.html
+    http://exposnitc.github.io/os_design-files/stack_interrupt.html
+    http://exposnitc.github.io/os_design-files/stack_smcall.html
+    http://exposnitc.github.io/os_design-files/process_table.html
+

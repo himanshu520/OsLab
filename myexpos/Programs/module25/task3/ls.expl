@@ -1,0 +1,32 @@
+int main() {
+    decl
+        int fid, ignore;
+        str filename, out;
+    enddecl
+
+    begin
+        fid = exposcall("Open", "root");
+        ignore = exposcall("Write", -2, "__________");
+        if(fid < 0) then
+            out = "Error";
+            ignore = exposcall("Write", -2, out);
+        else
+            while(1 == 1) do
+                ignore = exposcall("Read", fid, filename);
+                if(ignore == -2) then
+                    ignore = exposcall("Close", fid);
+                    break;
+                else
+                    if(filename != "-1") then
+                        ignore = exposcall("Write", -2, filename);
+                        breakpoint;
+                    endif;
+                endif;
+                ignore = exposcall("Seek", fid, 7);
+            endwhile;
+        endif;
+        ignore = exposcall("Write", -2, "__________");
+        ignore = exposcall("Write", -2, " ");
+        return 0;
+    end
+}

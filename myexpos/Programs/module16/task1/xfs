@@ -1,0 +1,15 @@
+#!/bin/bash
+./xfs-interface load --os ../Programs/module16/task1/os_startup.xsm
+./xfs-interface load --init ../Programs/module16/task1/init.xsm
+./xfs-interface load --idle ../Programs/module16/task1/idle.xsm
+./xfs-interface load --library ../expl/library.lib
+./xfs-interface load --exhandler ../Programs/module16/task1/haltprog.xsm
+./xfs-interface load --int=timer ../Programs/module16/task1/int_timer.xsm
+./xfs-interface load --int=console ../Programs/module16/task1/int_console.xsm
+./xfs-interface load --int=6 ../Programs/module16/task1/syscall_read.xsm
+./xfs-interface load --int=7 ../Programs/module16/task1/syscall_print.xsm
+./xfs-interface load --int=10 ../Programs/module16/task1/syscall_exit.xsm
+./xfs-interface load --module 0 ../Programs/module16/task1/module_resource.xsm
+./xfs-interface load --module 4 ../Programs/module16/task1/module_deviceManager.xsm
+./xfs-interface load --module 5 ../Programs/module16/task1/module_scheduler.xsm
+./xfs-interface load --module 7 ../Programs/module16/task1/module_boot.xsm

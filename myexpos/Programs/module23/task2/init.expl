@@ -1,0 +1,25 @@
+int main() {
+
+    decl
+        int ignore, ret, permission;
+        str out, filename;
+    enddecl
+
+    begin
+        out = "Filename";
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Read", -1, filename);
+        out = "Permission";
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Read", -1, permission);
+        ret = exposcall("Create", filename, permission);
+        if(ret == 0) then
+            out = "Success";
+        else
+            out = "Failed";
+        endif;
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Shutdown");
+        return 0;
+    end
+}

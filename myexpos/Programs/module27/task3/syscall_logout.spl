@@ -1,0 +1,51 @@
+//interrupt routine 12 (login (syscall 28))
+//Link - http://exposnitc.github.io/os_design-files/multiusersyscalls.html#login
+//Arguments - None
+//output - -1 (on failure), otherwise does not return
+
+alias curPID R0;
+alias curProcT R1;
+alias curPT R2;
+alias userSP R3;
+alias returnValue R4;
+
+curPID = [SYSTEM_STATUS_TABLE + 1];
+curProcT = PROCESS_TABLE + 16 * curPID;
+curPT = PAGE_TABLE_BASE + 20 * curPID;
+userSP = SP;
+returnValue = [curPT + 2 * ((userSP - 1) / 512)] * 512 + (userSP - 1) % 512;
+
+//if the current process is not the shell process (pid 2) return -1
+if(curPID != 2) then
+    [returnValue] = -1;
+    ireturn;
+endif;
+
+//setting the MODE to syscall number and also switching to kernel stack
+[curProcT + 9] = 7;
+[curProcT + 13] = userSP;
+SP = [curProcT + 11] * 512 - 1;
+
+//calling killAll function (5) of the process manager module (1)
+multipush(R0, R1, R2, R3, R4);
+R1 = 5;
+R2 = curPID;
+call MOD_1;
+multipop(R0, R1, R2, R3, R4);
+
+//setting the state of the current (shell) process to terminated
+[curProcT + 4] = TERMINATED;
+
+//making shell ready to run when the next user logs in
+//for this make UPTR field to (512 * 8) and place the address of the first instruction on the stack top
+[curProcT + 13] = 8 * 512;
+[[curPT + 16] * 512] = [[curPT + 8] * 512 + 1];
+
+//change the state of the login process to ready
+[PROCESS_TABLE + 20] = READY;
+
+//changing the userid field in the system status table to 0 (kernel)
+[SYSTEM_STATUS_TABLE] = 0;
+
+//calling the scheduler
+call MOD_5;

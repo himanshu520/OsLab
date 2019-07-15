@@ -1,0 +1,29 @@
+alias functionNum R1;
+alias currentProcess R2;
+alias toWrite R3;
+
+
+if(functionNum == 3) then
+    //saving the context of the process to call AcquireTerminal
+    multipush(R1, R2, R3);
+    functionNum = 8;
+
+    //calling AcquireTerminal
+    call MOD_0;
+    //AcquireTerminal has no return value, so we will ignore it
+
+    //control will reach here only if the terminal is acquired
+    //restore the context and print the word
+    multipop(R1, R2, R3);
+    print toWrite;
+
+    //now the terminal must be released, so again save the context to call ReleaseTerminal
+    multipush(R1, R2, R3);
+    functionNum = 9;
+    call MOD_0;
+
+    //store the return value if needed for future reference and restore the context
+    R4 = R0;
+    multipop(R1, R2, R3);
+    return;
+endif;

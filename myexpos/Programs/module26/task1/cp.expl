@@ -1,0 +1,47 @@
+int main() {
+    decl
+        str fileA, fileB, string, out;
+        int ignore, fidA, fidB;
+    enddecl
+
+    begin
+        out = "Src File";
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Read", -1, fileA);
+        out = "Dest File";
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Read", -1, fileB);
+        ignore = exposcall("Delete", fileB);
+        fidA = exposcall("Open", fileA);
+        if(fidA < 0) then
+            out = "Error";
+            ignore = exposcall("Write", -2, out);
+        else
+            ignore = exposcall("Create", fileB, 1);
+            if(ignore >= -1) then
+                fidB = exposcall("Open", fileB);
+            endif;
+            if(ignore < 0 OR fidB < 0) then
+                out = "Error";
+                ignore = exposcall("Write", -2, out);
+                ignore = exposcall("Close", fidA);
+            else
+                while(1 == 1) do
+                    ignore = exposcall("Read", fidA, string);
+                    if(ignore == -2) then
+                        break;
+                    endif;
+                    ignore = exposcall("Write", fidB, string);
+                endwhile;
+                ignore = exposcall("Close", fidA);
+                ignore = exposcall("Close", fidB);
+                breakpoint;
+            endif;
+            out = "Copied";
+            ignore = exposcall("Write", -2, out);
+        endif;
+        ignore = exposcall("Write", -2, " ");
+        breakpoint;
+        return 0;
+    end
+}

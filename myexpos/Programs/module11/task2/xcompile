@@ -1,0 +1,3 @@
+#!/bin/bash
+./expl ../Programs/module11/task2/numbers.expl
+mv assemblycode.xsm ../Programs/module11/task2/numbers.xsm

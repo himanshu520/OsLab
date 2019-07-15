@@ -1,0 +1,16 @@
+#!/bin/bash
+./xfs-interface load --int=10 ../Programs/module15/task1/int10.xsm
+./xfs-interface load --exhandler ../Programs/module15/task1/haltprog.xsm
+./xfs-interface load --int=timer ../Programs/module15/task1/timer.xsm
+./xfs-interface load --os ../Programs/module15/task1/os_startup.xsm
+./xfs-interface load --init ../Programs/module15/task1/init.xsm
+./xfs-interface load --int=7 ../Programs/module15/task1/print.xsm
+./xfs-interface load --library ../expl/library.lib
+./xfs-interface load --idle ../Programs/module15/task1/idle.xsm
+./xfs-interface load --module 7 ../Programs/module15/task1/boot.xsm
+./xfs-interface load --module 5 ../Programs/module15/task1/scheduler.xsm
+./xfs-interface load --module 4 ../Programs/module15/task1/deviceManager.xsm
+./xfs-interface load --module 0 ../Programs/module15/task1/module0.xsm
+./xfs-interface load --exec ../Programs/module15/task1/even.xsm
+./xfs-interface dump --inodeusertable
+mv inodeusertable.txt ../Programs/module15/task1/inodeusertable.txt

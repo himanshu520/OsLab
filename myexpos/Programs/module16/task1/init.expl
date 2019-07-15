@@ -1,0 +1,34 @@
+int main() {
+    decl
+        int x, y, t, ignore;
+        str num1, num2, gcd;
+    enddecl
+    begin
+
+        num1 = "num1 = ";
+        ignore = exposcall("Write", -2, num1);
+        ignore = exposcall("Read", -1, x);
+
+        num2 = "num2 = ";
+        ignore = exposcall("Write", -2, num2);
+        ignore = exposcall("Read", -1, y);
+
+        if(x < y) then
+            t = y;
+            y = x;
+            x = t;
+        endif;
+
+        while(y != 0) do
+            t = y;
+            y = x % y;
+            x = t;
+        endwhile;
+
+        gcd = "GCD = ";
+        ignore = exposcall("Write", -2, gcd);
+        ignore = exposcall("Write", -2, x);
+
+        return 0;
+    end
+}

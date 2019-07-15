@@ -1,0 +1,21 @@
+#!/bin/bash
+./xfs-interface load --os ../Programs/module17/task2/os_startup.xsm
+./xfs-interface load --init ../Programs/module17/task2/init.xsm
+./xfs-interface load --idle ../Programs/module17/task2/idle.xsm
+./xfs-interface load --library ../expl/library.lib
+./xfs-interface load --exhandler ../Programs/module17/task2/haltprog.xsm
+./xfs-interface load --int=timer ../Programs/module17/task2/int_timer.xsm
+./xfs-interface load --int=console ../Programs/module17/task2/int_console.xsm
+./xfs-interface load --int=6 ../Programs/module17/task2/syscall_read.xsm
+./xfs-interface load --int=7 ../Programs/module17/task2/syscall_print.xsm
+./xfs-interface load --int=9 ../Programs/module17/task2/syscall_exec.xsm
+./xfs-interface load --int=10 ../Programs/module17/task2/syscall_exit.xsm
+./xfs-interface load --module 0 ../Programs/module17/task2/module_resource.xsm
+./xfs-interface load --module 1 ../Programs/module17/task2/module_process.xsm
+./xfs-interface load --module 2 ../Programs/module17/task2/module_memory.xsm
+./xfs-interface load --module 4 ../Programs/module17/task2/module_deviceManager.xsm
+./xfs-interface load --module 5 ../Programs/module17/task2/module_scheduler.xsm
+./xfs-interface load --module 7 ../Programs/module17/task2/module_boot.xsm
+./xfs-interface load --exec ../Programs/module17/task2/odd.xsm
+./xfs-interface dump --inodeusertable
+mv inodeusertable.txt ../Programs/module17/task2/inodeusertable.txt

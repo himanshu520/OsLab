@@ -1,0 +1,49 @@
+In this stage we will handle the task of process synchronisation - through wait and signal syscall.
+We will also implement Getpid and Getppid syscalls. All of these four syscalls are implemented as
+interrupt routine 11 (but they have different syscall numbers).
+Semaphores will be implemented in the next stage.
+
+______________________________________________________________________________________________________________
+Access Control and Synchronisation
+==============================================================================================================
+Two processes sharing the same resource can't be in their critical section simultaneously. For this we
+use semaphores - a semaphore is simply a variable (or some other abstract data structure) that is used to
+solve this problem of non-simultaneous access of the critical section.
+eXpOS provides binary semaphore - this means that the semaphore has to states - set and reset.
+
+The following syscalls are used for access control -
+    Semget - Get a semaphore and share it with child, its child and so on
+    SemLock - Lock the semaphore (for process (among those that are currently sharing the semaphore)
+                    that is calling the syscall). Any process that subsequently tries to lock the
+                    semaphore will get blocked until the semaphore is unlocked by the process that has
+                    locked the semaphore
+    SemUnlock - Unlock the semaphore from the calling process
+
+
+______________________________________________________________________________________________________________
+Process Synchronisation
+==============================================================================================================
+Wait and Signal syscalls are used for process synchronisation.
+A process can execute Wait syscall by passing the PID of some other process and go to sleep. The process
+remains in sleep until one of the following happens -
+    The process specified by the PID exits
+    The process specified by the PID issues a Signal syscall
+
+When a process executes a Signal syscall, all the processes waiting for it are signalled.
+
+Another thing to notice is that when a process exits all the processes waiting for it must be woken up.
+For this, we would modify the ExitProcess function in the process manager module. But the problem here
+is that Exec syscall handler also calls the ExitProcess function. But in this case the waiting processes
+must not be woken up. So, we will have to keep this in mind.
+Also, when a process exits all its children becomes orphan. So, their PPID is set to -1 in the ExitProcess
+function. But here also we will have to take care of the special case when ExitProcess is called from
+Exec syscall handler.
+
+
+______________________________________________________________________________________________________________
+Shell Program (the version implemented here)
+==============================================================================================================
+Shell is a user program that interacts with the user. The shell asks for a command (a string). If the
+command is "Shutdown", it halts the system otherwise it executes the file "command" by forking the
+current shell process. The shell then waits till the child exits and then ask for another command.
+If the command given by the user is not valid the child prints "BAD COMMAND" and exits.

@@ -1,0 +1,178 @@
+_________________________________________________________________________________________________________________
+SYSTEM PROGRAMMERR'S LANGUAGE
+=================================================================================================================
+Each SPL program is considered as a module
+A module can consists of a maximum of 1024 words - which includes data and instruction
+Particular class of modules called INTERRUPT SERVICE ROUTINES can be invoked from the application using INT instruction
+Other modules can be invoked from the kernel
+
+Detailed specification of the language can be found at - http://exposnitc.github.io/support_tools-files/spl.html
+
+_________________________________________________________________________________________________________________
+Language summary
+=================================================================================================================
+
+only single line comments - start with '//' and continues till the end of the line
+identifiers must start with an alphabet and may contain alphabet, digit or an underscore
+only string and integer literals are allowed - string literals must be enclosed within double quotes
+label are supported and used with goto and call statements
+Registers and Ports
+    R0 - R15 are program registers
+    R16 - R19 are reserved for the compiler
+    Base pointer (BP), stack pointer (SP), instruction pointer (IP)
+    Page Table Base Register (PTBR), Page Table Length Register (PTLR)
+    Exception Instruction Pointer (EIP), Exception cause (EC), exception page number (EPN), exception memory address (EMA)
+    Input Port (P0), output port (P1), unused ports (P2, P3)
+
+    register and port names can be aliased using the alias keyword. Example "alias reg R0".
+    a register can have only one alias at a time. However, we can change the alias of a register. Two registers/ports
+    can not have same alias. An alias done inside an if or while block is valid only inside the block.
+
+symbolic constants can also be given name using 'define'. Any constants can be given more than one name, however a name
+can be used only once during a program
+SPL implementation comes with a set of predefined constants mentioned in the splconstants.cfg
+
+relational operators can also be applied to strings, which compares them lexicographically
+if one of the operands for a relational operators is a string, the other is also treated as a string. For example "3" == 3,
+gives 1, as 3 is treated as "3".
+memory of the machine can also be accessed using an addressing expression in the SPL program. [] operator is used for this
+purpose, where the address to be accessed is provided within the brackets.
+
+statements control the execution of a program. all statements end with a semicolon
+    define statement must be used above all the statements in the program
+    if statement -
+        if (logical expression) then
+            statement;
+        else
+            statement;
+        endif;
+
+        here the else part is optional
+
+    while statement -
+        while (logical expression) do
+            statement;
+        endwhile;
+
+    break and continue can be used inside the while loop
+
+    ireturn (Interrupt Return) is used the pass the program control from kernel mode interrupt service routine to the
+    user mode program that invoked it
+
+    read and print statements are used to read and write from the standard input and output respectively. read initiates
+    the transfer of string from the standard input to port P0 (string must be less than 10 characters). It doesn't wait
+    for the input to be completed and moves to the next statement. print writes the value of a register, integer/string/
+    expression, memory to the standard output.
+
+    readi can be used only in debug mode and used to take user input in a specified register (read takes no argument and
+    stores the input in port P0. But readi takes the register as argument where the input is to be stored)
+
+    load and store instructions can be used to move data between disk and the memory. both takes the argument in the form
+    of (page_number, block_number). Both the arguments can be specified in the form of an arithematic expression. However,
+    both does not wait for the disk transfer to  be completed and proceed to the next statement.
+
+    loadi statement is similar to load but it waits for the load to complete before going to the next statement
+
+    multipush and multipop is used to push and pop a sequence of registers into the stack (basically an area in the memory
+    pointed to by the stack pointer). The registers are pushed in the same order in which they are mentioned but are popped
+    in the reversed order.
+
+    backup is used to copy the contents of all (except, IP, SP, ports and exception registers) the registers to the stack
+    in the order BP, PTBR, PTLR, R0-R19.
+    restore is used to copy the previously backed up contents from the stack to the registers. they are referred to in the
+    opposite order of what they were stored.
+
+    encrypt can be used to replace the contents of a register with its encrypted value
+    goto statement can be used to transfer control to a specified label/INT_n/MOD_n
+    call is used to save procedure linking information on the stack and jump to a label/INT_n/MOD_n
+    return statement is used to transfer the control back from a subroutine in kernel mode to user program and the return
+    address is popped from the stack
+
+    halt is used to halt the machine
+    inline is used to give XSM instructions directly in the SPL program (in the form of a string)
+
+SPL doesnot provide explicit functions but we can use labels/memory address to call functions using call statement. The
+arguments can be passed using registers or the stack. Also, the labels in one module are not visible in the other.
+
+system call handler, interrupt service routines and modules are all designed to occupy a maximum of two continuous pages in the
+memory. These may be entered as a result of -
+    system call handler is entered upon the execution of a software interrupt from a user mode program
+        the calling module is expected to save the state of its registers before making the call, so that the handler can
+        use the registers freely.
+        However, the interrupt handler has to save the SP register (and the module must save it for future return - here module
+        means the interrupt handler).
+        the kernel module must switch to kernel stack to and not use application's stack - to avoid user level hacks into
+        the interrupt module through the stack.
+    hardware interrupt is executed when the machine raises hardware exception while an application was executing
+        this case applies to the exception handler, time interrupt routine, disk interrupt routine, and console interrupt routine.
+        the difference from the previous case is that the application does not have control over the transfer to interrupt
+        module so it might not have saved the contents of its registers.
+        so in this case the module (the interrupt handler) must save the contents of the user registers in its own stack/memory
+        before using the registers and restore them before returning.
+        again the module (handler) is expected to allocate its own stack and not use the application's stack.
+    a module may be invoked from other module or interrupt handler
+        since in this case both - the caller and the callee are running  in protected mode, they can use the same stack.
+        the caller must save the contents of its registers before calling. the convention is to use the registers R1, R2,...
+        to pass the arguments and use R0 to return values. The registers are used to pass the arguments instead of the stack
+        because it is fast and efficient.
+    (Read more from - http://exposnitc.github.io/support_tools-files/spl.html)
+
+
+_________________________________________________________________________________________________________________
+XSM instruction set
+=================================================================================================================
+(Reference - http://exposnitc.github.io/arch_spec-files/instruction_set.html)
+every instruction in xsm is of 2 words
+the instructions can be classified into priveledged and unpriveledged mode. The instructions have different semantics depending
+upon the mode
+unpreviledged mode
+    the only registers available in this mode are R0-R19, SP, BP, IP
+    Note that in
+    data movement operations
+        these can be performed using the keyword MOV
+        the different types of data movement that can be done are - register addressing, immediate addressing, register indirect
+        addressing, direct addressing
+    arithematic instructions
+        ADD, SUB, MUL, DIV, MOD, INR, DCR
+    logical instructions
+        LT, GT, LE, GE, EQ, NE
+    branch instructions
+        conditional branch - JZ, JNZ
+        unconditional branch - JMP
+    stack instruction
+        PUSH - push the register contents in the argument and increment the stack pointer by 1
+        POP - pop the stack top in the register and decrease the stack pointer by 1
+
+    for all the instructions till now none of the arguments can be IP.
+
+    subroutine instructions
+        CALL - copies the address of the next instruction (IP + 2), on to the stack (at SP + 1) and increments the
+        stack by 1
+        RET - returns to the memory address pointed to by the stack pointer and decrease the stack pointer by 1
+    debug instructions
+        BRKP - to put a breakpoint in the code
+        the instruction execution stops at the breakpoint. We can step on to the next instruction using 's' and continue
+        till the next breakpoint using 'c'. We can see the contents of the registers usign 'reg' and also copy a
+        memory page to a file using "mem <page_number>". A file with name 'mem' is created in the current directory.
+    software interrupts
+        Syntax - INT n (here n is from 4 to 18 as parameter)
+        it generates an interrupt. The (virtual) address of the next instruction is pushed onto the stack, the stack
+        pointer is incremented and kernel mode is started. It also disables the interrupts
+        INT can be invoked only from the user mode.
+    NOP instruction
+
+previledged mode
+    in unpreviledged mode the addresses are the virtual address, whereas in the kernel mode the addresses are the real
+    physical addresses.
+    LOAD (execution continues without wait, raises disk interrupt when done), LOADI, STORE (raises disk interrupt),
+    ENCRYPT, BACKUP, RESTORE, IN (execution continues without waiting for completion, raises console interrupt when done),
+    INI (not raises any interrupt), OUT(raises console interrupt)
+    PORT
+        used to transfer the contents from the ports to the registers (similar to MOV).
+    IRE
+ T       used to return control from a interrupt service routine/exception handler to the user program. The control is
+        switched to user mode, interrupts are enabled. The address of the next instruction is copied from the stack.
+        Note, that the user mode is enabled before executing the statement, so the address in the stack are treated as
+        relative addresses.
+    HALT
+        this causes the machine to halt immediately.

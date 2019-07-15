@@ -1,0 +1,39 @@
+decl
+    int semid, pid, data, ignore, fid;
+    string filename, out;
+enddecl
+
+int main() {
+    begin
+        out = "Filename";
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Read", -1, filename);
+        fid = exposcall("Open", filename);
+        semid = exposcall("Semget");
+        pid = exposcall("Fork");
+        if(pid > 0) then
+            while(1 == 1)  do
+                ignore = exposcall("SemLock", semid);
+                ignore = exposcall("Read", fid, data);
+                if(ignore == -2) then
+                    break;
+                endif;
+                ignore = exposcall("Write", -2, data);
+                ignore = exposcall("SemUnLock", semid);
+            endwhile;
+            ignore = exposcall("Semrelease", semid);
+        else
+            while(1 == 1)  do
+                ignore = exposcall("SemLock", semid);
+                ignore = exposcall("Read", fid, data);
+                if(ignore == -2) then
+                    break;
+                endif;
+                ignore = exposcall("Write", -2, data);
+                ignore = exposcall("SemUnLock", semid);
+            endwhile;
+            ignore = exposcall("Semrelease", semid);
+        endif;
+        return 0;
+    end
+}

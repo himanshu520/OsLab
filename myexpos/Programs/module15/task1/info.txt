@@ -1,0 +1,101 @@
+In this module, we will learn about module parameter passing mechanism and will also implement device
+and resource manager modules - handles the acquisition and release of terminal.
+
+
+______________________________________________________________________________________________________________
+Resource manager module
+==============================================================================================================
+Module 0 is the resource management module. When a process wants to use a resource, it must make a request
+for the same. This request is handled by the resource manager module. If the resource is free, it is given
+to the requesting process, else the process is blocked until the resource is free and other processes are
+scheduled instead.
+
+A blocked process must wake up when the resource is released. For this, when a process releases a resource,
+the state of the other processes, waiting for the process must be set to READY.
+This is the task of the resource manager. When a process wants to acquire or release a resource, it invokes
+the resource manager.
+
+Details about the various functions implemented inside the resource manager module can be found here -
+    http://exposnitc.github.io/os_modules/Module_0.html
+
+
+
+______________________________________________________________________________________________________________
+Terminal status table
+==============================================================================================================
+The OS maintains a data structure called "Terminal status table" that maintains information about the
+terminal - whether it is free / busy (first word) and if busy then which process is using it (second
+word).
+The base address of the terminal status table is "TERMINAL_STATUS_TABLE".
+
+
+
+______________________________________________________________________________________________________________
+Acquire terminal and release terminal
+==============================================================================================================
+Among various functions implemented inside the resource manager module, these two functions controls the
+terminal. Every function has a function number to identify the function inside the module - these two
+corresponds to function number 8 and 9.
+This function number is passed as the first argument to the module (in R1) (The other arguments are
+stored in R2, R3, ....) The pid is passed as the second argument for both of these cases.
+
+
+
+______________________________________________________________________________________________________________
+Terminal write
+==============================================================================================================
+Acquire terminal and release terminal are not directly invoked from the write system call. Write system
+call invokes "Terminal Write" function inside the device manager module (MODULE 4). This function
+acts as an abstract layer between write system call and the terminal handling functions in the resource
+manager module.
+The function number for the terminal write is 3, which is passed through R1 as the first argument. The
+other arguments are the pid of the current process and the word to be printed, which are passed through
+registers R2 and R3.
+Terminal write first acquires the terminal(using AcquireTerminal, prints the word and then releases it,
+using "ReleaseTerminal".
+
+The invoker must save its context before calling and then pass the arguments using the registers.
+Also, upon return it must pop off the return value, restore its context and resume its execution.
+Here 'multipush' and 'multipop' statements can be very useful. The order of register in multipop must
+be same as that in multipush as multipop pops in reverse order.
+
+Another thing to notice is that the AcquireTerminal function waits in a loop, in which it repeatedly
+invokes the scheduler if the Terminal is not free - this is called 'busy wait' / 'busy loop'.
+
+
+
+______________________________________________________________________________________________________________
+Deadlock
+==============================================================================================================
+In concurrent computing, a deadlock is a state in which each member of a group is waiting for some other
+member to take action, such as sending a message or more commonly releasing a lock. Deadlock is a common
+problem in multiprocessing systems, parallel computing, and distributed systems, where software and
+hardware locks are used to handle shared resources and implement process synchronization.
+
+In an operating system, a deadlock occurs when a process or thread enters a waiting state because a
+requested system resource is held by another waiting process, which in turn is waiting for another
+resource held by another waiting process. If a process is unable to change its state indefinitely because
+the resources requested by it are being used by another waiting process, then the system is said to be
+in a deadlock.
+
+
+Necessary conditions -
+
+A deadlock situation on a resource can arise if and only if all of the following conditions hold
+simultaneously in a system:
+
+    Mutual exclusion: At least one resource must be held in a non-shareable mode. Otherwise, the processes
+    would not be prevented from using the resource when necessary. Only one process can use the resource
+    at any given instant of time.
+
+    Hold and wait or resource holding: a process is currently holding at least one resource and requesting
+    additional resources which are being held by other processes.
+
+    No preemption: a resource can be released only voluntarily by the process holding it.
+
+    Circular wait: each process must be waiting for a resource which is being held by another process,
+    which in turn is waiting for the first process to release the resource. In general, there is a set
+    of waiting processes, P = {P1, P2, …, PN}, such that P1 is waiting for a resource held by P2, P2
+    is waiting for a resource held by P3 and so on until PN is waiting for a resource held by P1.
+
+These four conditions are known as the Coffman conditions from their first description in a 1971 article by Edward G. Coffman, Jr.

@@ -1,0 +1,106 @@
+In this module, we will learn about taking console inputs and will be introduced to input buffers.
+
+______________________________________________________________________________________________________________
+XSM interrupts and exception handling
+==============================================================================================================
+XSM supports three kinds of hardware interrupts - disk, timer and console interrupts. Associated with each
+interrupt is a interrupt handler routine. These interrupt handling routines are called timer interrupt
+handler, disk interrupt handler, console interrupt handlers.
+
+The addresses of these handlers are prestored in the addresses 493, 494 and 495 of the ROM and are preset to
+2048, 3072 and 4096 respectively. Hence, the OS bootstrap code must load these into these memory locations.
+
+Note that once the machine enters into the priveldged mode, the interrupts are disabled so that there are no
+race conditions. Timer interrupts enable the OS to enter into priveleged mode after regular intervals of time.
+This is used for context switching in a time-sharing environment, and it also ensures that no process runs for
+infinite amount of time.
+The load/store instructions are used to transfer data between the disk and the memory. Once the machine
+encounters such a instruction, it initiates the disk transfer without waiting for it to be completed. Once the
+transfer is complete, the disk controller will raise a disk interrupt.
+Similarly, IN instruction will not suspend the machine till input is given from the console. The machine moves
+on to the next instruction. When the user enters data, the data is transferred to PORT 0 and an interrupt is
+raised by the console device.
+
+(Note that as already said the interrupts are disabled in priveleged mode execution. So, if a device raises
+a LOAD/STORE/IN interrupt in the priveleged mode, these interrupts are not handled until the machine enters
+in the unpriveleged mode.)
+
+
+Exception handler -
+    An exception must not be able to halt the whole system - the correct action is to transfer control to some
+    priveleged mode handler - the exception handler (it starts at memory address 1024).
+    Some of the exceptions are -
+        illegal memory access
+        illegal instruction
+        arithematic exceptions
+            In the above mentioned exceptions - the exception handler passes control to some other privelged
+            mode rountine that terminates the program and schedules some other program.
+        page fault - page fault occurs when the logical address mentioned in a program is correct but the
+                    corresponding page in the memory has page-table entry's valid bit set to 0.
+            A page fault exception can occur either during an instruction fetch or during an operand fetch.
+
+Demand paging - OS may delay the allocation of memory pages to a program until a page exception is raised.
+        This "lazy allocation" enables the OS to concurrently run more processes than is feasible without
+        such a technique. The page fault handler may be designed to allocate the required pages in the
+        memory when such an exception is raised.
+
+Control flow during an exception -
+    The IP value is set to 1024 and the machine switches to privelged mode. The next instruction is fetched
+        from the exception handler.
+    The machine sets several CPU registers that describes the exception.
+        Exception Instruction Pointer (EIP) - The logical address of the instruction that caused the exception.
+        Exception Page Number (EPN) - The contents of this register is valid only in the case of page fault.
+                    The logical page number that caused the exception is stored in this register.
+        Exception Cause (EC) - This register will contain the cause of the exception.
+                Page fault - 0, Illegal instruction - 1, Illegal memory access - 2, arithematic exception - 3.
+        Exception Memory Address (EMA) - The contents of this register is valid only in the case of illegal
+                    memory access. The illegal memory that was tried to be accessed is stored in this register.
+                    This can contain the address which is out of the range of the logical address of the
+                    program or a write attempt to a page which is read-only.
+
+Reference - http://exposnitc.github.io/Tutorials/xsm_interrupts_tutorial.html
+
+
+______________________________________________________________________________________________________________
+Console interrupt handling
+==============================================================================================================
+A process must use IN instruction to read data from the console into the PORT P0. IN is a priveleged mode
+instruction and can be executed only inside a system call/module. Hence, the program must use the read
+system call for console input. The read syscall invokes the Terminal Read function present in the Device
+manager module (module 4). The IN instruction will be executed inside this Terminal Read function.
+
+The IN instruction doesnot wait for the data to arrive in the P0 port - the machine continues by executing
+the next instruction. A console interrupt is raised when ENTER key is pressed on the keyboard after entering
+some string or number. This tells the XSM machine that the IN instruction is complete.
+The process that executed the read system call goes into WAIT_TERMINAL state and calls the scheduler - so
+that other programs could be run. Its not a good idea to keep the process that called the system call to
+keep running.
+
+The machine halts the current running process and invokes the console interrupt handler in the case of a
+console interrupt. The console interrupt handler must pass in the data from PORT P0 to the process which
+is waiting for the data. This is done by copying the data from the P0 port to the input buffer field of the
+process table of the process. The interrupt handler also wakes up the process by setting its state to READY.
+
+The interrupt handler uses the PID field of the terminal status table to identify the correct process that
+acquired the terminal for the read operation.
+
+The control flow is as below
+    The read system call is invoked using library interface. The file descriptor for console input is -1,
+    which is passed as the first argument. The second argument is the variable to store string/number
+    from console.
+    The expos library interface converts syscall to low level system call interface for read syscall,
+    invoking interrupt 6.
+    The interrupt 6 invokes the Terminal read function in the device manager module. Function number for the
+    terminal read (4), the PID of the process and address where the word is supposed to be stored is passed
+    as argument from registers R1, R2 and R3. The Terminal read must perform the following functions -
+        Acquire the terminal.
+        Issue an IN instruction (using read instruction of SPL)
+        Set the process state as WAIT_TERMINAL
+        Invoke the scheduler
+        After the console interrupt wakes up the process, transfer the data from the input buffer in the
+        process table into the word address.
+
+
+A process can acquire terminal by invoking Acquire Terminal function of the resource manager module.
+When the terminal read function acquires the terminal it enters the PID of the current process in the terminal
+status table.

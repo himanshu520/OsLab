@@ -1,0 +1,76 @@
+//interrupt routine 17 (login (syscall 27))
+//Link - http://exposnitc.github.io/os_design-files/multiusersyscalls.html#login
+//Arguments - Username, password
+//output - 0 (success), -1 (invalid username or password), -2 (permission denied)
+
+alias curPID R0;
+alias curProcT R1;
+alias curPT R2;
+alias userSP R3;
+alias returnValue R4;
+
+curPID = [SYSTEM_STATUS_TABLE + 1];
+curProcT = PROCESS_TABLE + 16 * curPID;
+curPT = PAGE_TABLE_BASE + 20 * curPID;
+userSP = SP;
+returnValue = [curPT + 2 * ((userSP - 1) / 512)] * 512 + (userSP - 1) % 512;
+
+//if the current process is not the login process (pid 1) return -2
+if(curPID != 1) then
+    [returnValue] = -2;
+    ireturn;
+endif;
+
+//setting the MODE to syscall number and also switching to kernel stack
+[curProcT + 9] = 7;
+[curProcT + 13] = userSP;
+SP = [curProcT + 11] * 512 - 1;
+
+//reading the arguments
+alias username R5;
+alias password R6;
+username = [[curPT + 2 * ((userSP - 4) / 512)] * 512 + (userSP - 4) % 512];
+password = [[curPT + 2 * ((userSP - 3) / 512)] * 512 + (userSP - 3) % 512];
+encrypt password;
+
+alias ctr R7;
+ctr = 0;
+while(ctr < MAX_USER_NUM) do
+    if([USER_TABLE + 2 * ctr] == username) then
+        break;
+    endif;
+    ctr = ctr + 1;
+endwhile;
+
+if((ctr == MAX_USER_NUM) || ([USER_TABLE + 2 * ctr + 1] != password)) then
+    //the username is not found in the user table or the password does not matches, return -1
+    [curProcT + 9] = 0;
+    SP = [curProcT + 13];
+    [returnValue] = -1;
+    ireturn;
+endif;
+
+
+//now the username and the password has matched. So we will allow the user, access with shell process
+alias shellProcT R8;
+shellProcT = PROCESS_TABLE + 32;
+[shellProcT + 4] = CREATED;
+[shellProcT + 3] = ctr;
+
+//setting the state of the current (login) process to wait for the shell process to exit
+[curProcT + 4] = WAIT_PROCESS;
+[curProcT + 5] = 2;
+
+//setting the new userid in the system status table (first entry)
+[SYSTEM_STATUS_TABLE] = ctr;
+
+//calling the scheduler
+multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8);
+call MOD_5;
+multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8);
+
+//switch to kernel stack, reset MODE flag and return 0
+[curProcT + 9] = 0;
+SP = [curProcT + 13];
+[returnValue] = 0;
+ireturn;

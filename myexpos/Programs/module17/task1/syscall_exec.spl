@@ -1,0 +1,150 @@
+//exec syscall interrupt handler (syscall 9 and interrupt routine 9)
+//expecting the caller to have saved its context before calling
+
+//saving the info of the current process
+alias currentPID R0;
+alias currentPT R1;
+alias currentProcT R2;
+alias currentUSP R3;
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+currentPT = PAGE_TABLE_BASE + 20 * currentPID;
+currentProcT = PROCESS_TABLE + 16 * currentPID;
+currentUSP = [currentPT + 2 * (SP / 512)] * 512 + (SP % 512);
+
+//switching to kernel stack
+[currentProcT + 13] = SP;
+SP = [currentProcT + 11] * 512 - 1;
+
+//setting the mode flag for the process in the process table (to syscall number 9 - for exec)
+[currentProcT + 9] = 9;
+
+//saving the filename argument from the user stack
+alias fileName R4;
+fileName = [currentUSP - 4];
+
+//finding the filename in the memory copy of inode table and also checking if the corresponding type is an executable
+alias inodeEntry R5;
+alias counter R6;
+inodeEntry = INODE_TABLE + 16;
+counter = 1;
+
+while(counter < MAX_FILE_NUM) do
+	if([inodeEntry + 1] == fileName && [inodeEntry] == EXEC) then
+		break;
+	endif;
+	inodeEntry = inodeEntry + 16;
+	counter = counter + 1;
+endwhile;
+
+//if the executable filename is not found in the disk return -1
+if(counter == MAX_FILE_NUM) then
+	[currentUSP - 1] = -1;
+	SP = [currentProcT + 13];
+	[currentProcT + 9] = 0;
+	ireturn;
+endif;
+
+//calling the Exit Process function (number 3) in the process manager module (module 1) to deallocate the resources and pages of the current process
+multipush(R0, R1, R2, R3, R4, R5);
+R1 = 3;
+R2 = currentPID;
+call MOD_1;
+
+//restoring the context of the registers
+multipop(R0, R1, R2, R3, R4, R5);
+
+//reclaiming the user area page of the previous process by incrementing its memory free list entry and decrementing the MEM_FREE_COUNT
+//the user area page of the previous (original) process can be seen from the process table
+[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1;	//memory free count
+
+[MEMORY_FREE_LIST + [currentProcT + 11]] = [MEMORY_FREE_LIST + [currentProcT + 11]] + 1; //memory free list
+
+
+//updating the SP to point to the top of the user area page and use it as new kernel stack
+SP = [currentProcT + 11] * 512 - 1;
+
+//setting the state field in the new process as RUNNING and also storing the inode index obtained above
+[currentProcT + 4] = RUNNING;
+[currentProcT + 7] = inodeEntry;
+
+
+//allocating new pages by calling GetMemoryPages function (number 2) in the memory manager module (2)
+//and setting the page table entries
+alias valueReturned R10;
+
+//Library
+[currentPT + 0] = 63;
+[currentPT + 1] = "0100";
+[currentPT + 2] = 64;
+[currentPT + 3] = "0100";
+
+//Heap
+multipush(R0, R1, R2, R3, R4, R5);
+R1 = 1;
+call MOD_2;
+valueReturned = R0;
+multipop(R0, R1, R2, R3, R4, R5);
+[currentPT + 4] = valueReturned;
+[currentPT + 5] = "0110";
+
+multipush(R0, R1, R2, R3, R4, R5);
+R1 = 1;
+call MOD_2;
+valueReturned = R0;
+multipop(R0, R1, R2, R3, R4, R5);
+[currentPT + 6] = valueReturned;
+[currentPT + 7] = "0110";
+
+
+//Stack
+multipush(R0, R1, R2, R3, R4, R5);
+R1 = 1;
+call MOD_2;
+valueReturned = R0;
+multipop(R0, R1, R2, R3, R4, R5);
+[currentPT + 16] = valueReturned;
+[currentPT + 17] = "0110";
+
+multipush(R0, R1, R2, R3, R4, R5);
+R1 = 1;
+call MOD_2;
+valueReturned = R0;
+multipop(R0, R1, R2, R3, R4, R5);
+[currentPT + 18] = valueReturned;
+[currentPT + 19] = "0110";
+
+//Code
+alias pagesRequired R7;
+pagesRequired = [inodeEntry + 2] / 512 + 1;
+
+counter = 0;
+
+//setting the pages
+while(counter < pagesRequired) do
+	multipush(R0, R1, R2, R3, R4, R5, R6, R7);
+	R1 = 1;
+	call MOD_2;
+	valueReturned = R0;
+	multipop(R0, R1, R2, R3, R4, R5, R6, R7);
+	[currentPT + 8 + 2 * counter] = valueReturned;
+	[currentPT + 9 + 2 * counter] = "0110";
+	counter = counter + 1;
+endwhile;
+
+//loading the code from the disk to the memory
+counter = 0;
+while(counter < pagesRequired) do
+	loadi([currentPT + 8 + counter * 2], [inodeEntry + 8 + counter]);
+	counter = counter + 1;
+endwhile;
+
+//storing the address of the first instruction on the top of the stack
+[[currentPT + 16] * 512] = [[currentPT + 8] * 512 + 1];
+
+//setting the process mode to normal for the new process
+[currentProcT + 9] = 0;
+
+//setting the SP
+SP = 8 * 512;
+
+ireturn;

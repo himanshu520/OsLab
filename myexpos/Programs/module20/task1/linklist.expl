@@ -1,0 +1,56 @@
+type
+    node {
+        int x;
+        node next;
+    }
+endtype
+
+int main() {
+    decl
+        node list, cur, prev;
+        int n, ctr, ignore;
+        str in, out;
+    enddecl
+    begin
+        in = "Enter N";
+        ignore = exposcall("Write", -2, in);
+        ignore = exposcall("Read", -1, n);
+
+        ctr = 0;
+        list = null;
+        cur = null;
+        prev = null;
+        ignore = initialize();
+
+        while(ctr < n) do
+            cur = alloc();
+            cur.next = null;
+
+            in = "Enter num";
+            ignore = exposcall("Write", -2, in);
+            ignore = exposcall("Read", -1, cur.x);
+
+            if(list == null) then
+                list = cur;
+            else
+                prev.next = cur;
+            endif;
+
+            prev = cur;
+            ctr = ctr + 1;
+        endwhile;
+
+        out = "Numbers";
+        ignore = exposcall("Write", -2, out);
+
+        cur = list;
+        while(cur != null) do
+            ignore = exposcall("Write", -2, cur.x);
+            prev = cur;
+            cur = prev.next;
+            free(prev);
+        endwhile;
+
+        return 0;
+    end
+}

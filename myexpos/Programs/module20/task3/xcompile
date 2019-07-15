@@ -1,0 +1,5 @@
+#!/bin/bash
+./expl ../Programs/module20/task3/idle.expl
+mv assemblycode.xsm ../Programs/module20/task3/idle.xsm
+./expl ../Programs/module20/task3/init.expl
+mv assemblycode.xsm ../Programs/module20/task3/init.xsm

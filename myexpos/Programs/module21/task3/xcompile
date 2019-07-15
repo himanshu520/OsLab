@@ -1,0 +1,9 @@
+#!/bin/bash
+./expl ../Programs/module21/task3/idle.expl
+mv assemblycode.xsm ../Programs/module21/task3/idle.xsm
+./expl ../Programs/module21/task3/init.expl
+mv assemblycode.xsm ../Programs/module21/task3/init.xsm
+./expl ../Programs/module21/task3/pid.expl
+mv assemblycode.xsm ../Programs/module21/task3/pid.xsm
+./expl ../Programs/module21/task3/fork.expl
+mv assemblycode.xsm ../Programs/module21/task3/fork.xsm

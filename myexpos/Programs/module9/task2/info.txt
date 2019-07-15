@@ -1,0 +1,133 @@
+In this module, we will setup kernel stack. When the processor mode changes to system mode, during interrupts the
+the kernel must switch from the stack of the user program and use a different stack to prevent user hack into kernel.
+The stack is called kernel stack and is allocated in a region of memory called the user area page.
+
+The user area page is maintained by the kernel for its own purpose, and contains the per process kernel stack and
+also 'per process resource table' of the process.
+
+
+
+_______________________________________________________________________________________________________________________
+The Per-Process Resource Table has 8 entries and each entry is of 2 words. For every instance of a file opened
+(or a semaphore acquired) by the process, it stores the index of the Open File Table (or Semaphore Table) entry
+for the file (or semaphore). One word is used to store the resource identifier which indicates whether the resource
+opened by the process is a FILE or a SEMAPHORE. Open system call sets the values of entries in this table for a file.
+
+The per-process resource table entry has the following format.
+                || Resource Identifier (1 word) | Index of Open File Table/ Semaphore Table entry (1 word) ||
+File descriptor, returned by Open system call, is the index of the per-process resource table entry for that
+open instance of the file. A free entry is denoted by -1 in the Resource Identifier field.
+
+
+
+
+Control is transferred from the user program to a kernel module when a process executes a system call or the an
+interrupt had occurred. The kernel then uses the kernel stack to avoid user level hacks.
+
+During system call, the user program pushes the system call parameter on its stack. The kernel extracts this parameter
+and then switches to kernel stack. Since, the syscall is executed by the user program, it is its duty to save the
+context of its own registers (except SP and BP for XSM). (However, if a program is written in ExPL then it is done by
+the compiler itself.)
+
+During interrupt the user programs have no control over the transfer to the kernel mode. Hence, the context of the user
+program must be saved by the interrupt handler before using the machine's registers. The context is stored in the
+kernel stack and is restored before exiting from the interrupt to restore the normal execution of the user program.
+
+In addition to above, when one kernel module calls another kernel module, the parameter and the return value are passed
+using the kernel stack.
+
+
+
+_______________________________________________________________________________________________________________________
+The sequence of actions performed by the user program during INT instructions are -
+    *   Save its register context in the stack
+    *   Push syscall number in the stack
+    *   Push syscall arguments (3 in total) in the stack
+    *   Push an empty space for the return value
+    *   Execute the INT instruction
+Note that XSM machine pushes the value of IP + 2, onto the user stack upon execution of the INT instruction
+
+
+
+
+The sequence of actions performed by the System call service routine -
+    *   Extract the system call number and arguments from the user stack
+    *   Set the MODE flag in the process table for the process to the system call number
+    *   Switch to kernel stack
+    *   Identify system call using system call number and transfer the control to the appropriate system call code
+
+
+
+
+The sequence of actions performed by the system call service routine while returning from the system call is -
+    *   Store the return value back in the user stack
+    *   Set the SP to the top of the user stack
+    *   Set the MODE flag in the process table for the process to 0
+    *   Execute return using IRET
+
+
+
+
+Steps performed by the process on return from the system call
+    *   Extract the return value
+    *   Pop off the passed arguments and the system call number from the stack
+    *   Restore the register context
+
+
+
+_______________________________________________________________________________________________________________________
+However, we saw that during exceptions/interrupts the user program has no control over transfer of control to kernel.
+Hence, it is the duty of the kernel to save and restore the context of the user program. So, the sequence of actions
+taken
+during interrupts and exceptions differ slightly from that during syscall
+
+
+Actions taken by XSM machine on receiving interrupt/exception -
+    *   Stores the value of IP + 2, onto the user stack
+    *   Switches mode of execution from user mode to kernel mode
+    *   Transfers control to the interrupt service routine or exception handler
+
+
+
+Actions taken by the kernel upon entering the interrupt service routine
+    *   Switch from the user stack to the kernel stack - storing SP to UPTR field in the process table and
+            setting the SP to (User Area Page  * 512 - 1).
+    *   Save the machine registers in the kernel stack
+    *   Continue the execution of the interrupt routine code.
+
+
+
+Actions taken by the interrupt service routine before returning from the user stack
+    *   Restore the user context using RESTORE
+    *   Set the SP to the top of the user stack
+    *   Transfer control back to the use process
+
+
+
+
+
+_______________________________________________________________________________________________________________________
+Now, we have two stacks in the memory. But we would also need some data structure to store the two SP values
+as the system has only one SP register. For this we would use Process Table.
+
+The process table has an entry for each running process and contains the info about the running process. The
+process table entry for a process is created when the process is created using FORK syscall. Each entry is of
+16 bytes. The following list shows the entries of the process table and corresponding byte numbers -
+        PID - 1,                PPID - 2
+        MODE FLAG - 9,          User Area Page Number - 11
+        KPTR - 12,              UPTR - 13
+        PTBR - 14,              PTLR - 15
+Here in eXpOS, PID is same as the index of the process in the process table.
+MODE FLAG is set to syscall number during a syscall, -1 during interrupt service routine otherwise is 0.
+KPTR stores the offset of the kernel stack pointer from the start of the user area page.
+
+
+
+
+_______________________________________________________________________________________________________________________
+References -
+    http://exposnitc.github.io/Roadmap.html
+    http://exposnitc.github.io/os_design-files/stack_interrupt.html
+    http://exposnitc.github.io/os_design-files/stack_smcall.html
+    http://exposnitc.github.io/os_design-files/process_table.html
+

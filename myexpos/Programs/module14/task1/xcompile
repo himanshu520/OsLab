@@ -1,0 +1,7 @@
+#!/bin/bash
+./expl ../Programs/module14/task1/idle.expl
+mv assemblycode.xsm ../Programs/module14/task1/idle.xsm
+./expl ../Programs/module14/task1/init.expl
+mv assemblycode.xsm ../Programs/module14/task1/init.xsm
+./expl ../Programs/module14/task1/even.expl
+mv assemblycode.xsm ../Programs/module14/task1/even.xsm

@@ -1,0 +1,61 @@
+In this module we will implement open, close and read syscalls.
+We will also understand the role of buffer cache.
+
+______________________________________________________________________________________________________________
+Open syscall (syscall number 2 in interrupt routine 5)
+==============================================================================================================
+Open takes filename as input and creates a new open instance of the file. It returns the fid - per process
+resource table index for the file. A file must be opened before read and write syscalls can be performed
+in it.
+The same file can be opened many times and either by same or different process. Each time a file is
+opened a new open file instance for it is created. The OS keeps track of all the open file instances
+from the Open file table. A new entry is also created in the per process resource table of the process.
+This entry stores the index of the open instance in the open file table.
+There is also file status table that keeps track of the number of open instances for each file
+(corresponding to each entry in the inode table there is an entry in the file status table with the same
+index).
+
+When open syscall is performed, a new entry is created in the open file table and the corresponding
+OpenInstanceCount (the number of processes sharing the open instance) is set to 0 and seek position
+is initialised to 0.
+Each time a file is opened, its OpenFileCount in the FileStatusTable is also incremented by 1.
+During fork, the open instances are copied from the parent to child - the same open instance
+is shared by both of them (the seek pointer are also same for both of them). So, the corresponding open
+instance count must also be incremented by 1. So, Open syscall calls Open function (30 in the file manager
+module (module 3) to deal with OpenFileTable and the FileStatusTable.
+
+We can open a data file or root file for reading. The root file can be opened for Reading by specifying
+the filename as "root". Note that the Root file is different from the other files - It has a reserved
+memory page copy. So this will be treated as a special case in all related system calls.
+
+
+______________________________________________________________________________________________________________
+Close syscall (syscall number 3 in the interrupt routine 5)
+==============================================================================================================
+When a process no longer needs a file, it can close it by calling Close syscall. Even if the Close
+syscall is not invoked, the open instance is closed at the termination of the process (if this is
+the last process accessing it).
+Similar to Open syscall, Close syscall also invokes close function (function 4) in the file manager
+module (module 3) to update the file status table and open file table.
+
+
+______________________________________________________________________________________________________________
+Read Syscall (syscall number 7 in interrupt routine 6)
+==============================================================================================================
+Read syscall takes file descriptor and address (where input is to be stored). It first acquires the inode
+in the beginning of the syscall and then releases the inode in the end of the syscall. For this it uses
+resource manager module (module 0). It reads the word at the position pointed to by lseek (in the open file
+table entry) and stores it into the address provided in the input. To perform the read/write the corresponding
+file must be loaded from the disk to memory. For this buffer cache is used and we use BufferedRead (1) and
+BufferedWrite (2) functions from the file manager module. They handle buffer management. BufferedRead
+loads the corresponding disk block to memory and then performs read from lseek position.
+Reading from root file doesnot involves buffer as the root file is already present in the memory.
+Also, the address where the read data is to be stored is the logical address, so it must be converted into
+physical address before the read data is stored.
+
+Also, read needs to lock inode, buffer and disk before the read is performed. These are released in the reverse
+order. This also helps to avoid deadlocks (by preventing circular wait queue).
+
+
+Links -
+    OpenFileTable - http://exposnitc.github.io/os_design-files/mem_ds.html#file_table

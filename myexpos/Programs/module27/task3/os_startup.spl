@@ -1,0 +1,67 @@
+//OS startup code
+
+//loading the boot module
+loadi(54, 67);
+loadi(55, 68);
+
+//setting SP to user area page of the idle process (page 76 is used)
+//and call the boot module
+SP = 76 * 512 - 1;
+call MOD_7;
+
+
+//loading the first code page of the idle program (only one code page is required)
+loadi(69, 11);
+
+//Setting the Page Table for the IDLE program (here pid = 0)
+PTBR = PAGE_TABLE_BASE;
+PTLR = 10;
+
+//Library
+[PTBR+0] = -1;
+[PTBR+1] = "0000";
+[PTBR+2] = -1;
+[PTBR+3] = "0000";
+
+//Heap
+[PTBR+4] = -1;
+[PTBR+5] = "0000";
+[PTBR+6] = -1;
+[PTBR+7] = "0000";
+
+//Code
+[PTBR+8] = 69;
+[PTBR+9] = "0100";
+[PTBR+10] = -1;
+[PTBR+11] = "0000";
+[PTBR+12] = -1;
+[PTBR+13] = "0000";
+[PTBR+14] = -1;
+[PTBR+15] = "0000";
+
+//Stack
+[PTBR+16] = 70;
+[PTBR+17] = "0110";
+[PTBR+18] = -1;
+[PTBR+19] = "0000";
+
+//Setting the process table for the IDLE program
+[PROCESS_TABLE + 0] = 0;                            //TICK
+[PROCESS_TABLE + 1] = 0;                            //PID
+[PROCESS_TABLE + 2] = -1;                           //PPID
+[PROCESS_TABLE + 3] = 0;                            //UID
+[PROCESS_TABLE + 4] = RUNNING;                      //process state
+[PROCESS_TABLE + 11] = 76;                          //user area page
+[PROCESS_TABLE + 12] = 0;                           //KPTR
+[PROCESS_TABLE + 13] = 8 * 512;                     //UPTR
+[PROCESS_TABLE + 14] = PAGE_TABLE_BASE;             //PTBR
+[PROCESS_TABLE + 15] = 10;                          //PTLR
+
+//Setting the current process number in the System Status Table
+[SYSTEM_STATUS_TABLE + 1] = 0;
+
+//Storing the IP in the top of the user stack and setting the SP
+[70 * 512] = [69 * 512 + 1];
+SP = 8 * 512;
+
+ireturn;

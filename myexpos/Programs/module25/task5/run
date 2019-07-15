@@ -1,0 +1,107 @@
+#!/bin/bash
+
+cd ../../../spl/
+
+./spl ../Programs/module25/task5/haltprog.spl
+./spl ../Programs/module25/task5/int_console.spl
+./spl ../Programs/module25/task5/int_disk.spl
+./spl ../Programs/module25/task5/int_timer.spl
+./spl ../Programs/module25/task5/int_exhandler.spl
+./spl ../Programs/module25/task5/module_boot.spl
+./spl ../Programs/module25/task5/module_process.spl
+./spl ../Programs/module25/task5/module_memory.spl
+./spl ../Programs/module25/task5/module_file.spl
+./spl ../Programs/module25/task5/module_device.spl
+./spl ../Programs/module25/task5/module_resource.spl
+./spl ../Programs/module25/task5/module_scheduler.spl
+./spl ../Programs/module25/task5/os_startup.spl
+./spl ../Programs/module25/task5/syscall_exit.spl
+./spl ../Programs/module25/task5/syscall_print.spl
+./spl ../Programs/module25/task5/syscall_read.spl
+./spl ../Programs/module25/task5/syscall_exec.spl
+./spl ../Programs/module25/task5/syscall_fork.spl
+./spl ../Programs/module25/task5/syscall_4.spl
+./spl ../Programs/module25/task5/syscall_5.spl
+./spl ../Programs/module25/task5/syscall_11.spl
+./spl ../Programs/module25/task5/syscall_13.spl
+./spl ../Programs/module25/task5/syscall_14.spl
+./spl ../Programs/module25/task5/syscall_shutdown.spl
+
+echo "==================SPL Compilation done==================="
+
+
+
+cd ../expl/
+
+./expl ../Programs/module25/task5/idle.expl
+mv assemblycode.xsm ../Programs/module25/task5/idle.xsm
+./expl ../Programs/module25/task5/init.expl
+mv assemblycode.xsm ../Programs/module25/task5/init.xsm
+./expl ../Programs/module25/task5/merge.expl
+mv assemblycode.xsm ../Programs/module25/task5/merge.xsm
+./expl ../Programs/module25/task5/ls.expl
+mv assemblycode.xsm ../Programs/module25/task5/ls.xsm
+./expl ../Programs/module25/task5/rm.expl
+mv assemblycode.xsm ../Programs/module25/task5/rm.xsm
+./expl ../Programs/module25/task5/cp.expl
+mv assemblycode.xsm ../Programs/module25/task5/cp.xsm
+./expl ../Programs/module25/task5/cat.expl
+mv assemblycode.xsm ../Programs/module25/task5/cat.xsm
+
+echo "==================EXPL Compilation done=================="
+
+
+
+cd ../xfs-interface/
+
+./xfs-interface fdisk
+./xfs-interface load --os ../Programs/module25/task5/os_startup.xsm
+./xfs-interface load --init ../Programs/module25/task5/init.xsm
+./xfs-interface load --idle ../Programs/module25/task5/idle.xsm
+./xfs-interface load --library ../expl/library.lib
+./xfs-interface load --exhandler ../Programs/module25/task5/int_exhandler.xsm
+./xfs-interface load --int=timer ../Programs/module25/task5/int_timer.xsm
+./xfs-interface load --int=disk ../Programs/module25/task5/int_disk.xsm
+./xfs-interface load --int=console ../Programs/module25/task5/int_console.xsm
+./xfs-interface load --int=4 ../Programs/module25/task5/syscall_4.xsm
+./xfs-interface load --int=5 ../Programs/module25/task5/syscall_5.xsm
+./xfs-interface load --int=6 ../Programs/module25/task5/syscall_read.xsm
+./xfs-interface load --int=7 ../Programs/module25/task5/syscall_print.xsm
+./xfs-interface load --int=8 ../Programs/module25/task5/syscall_fork.xsm
+./xfs-interface load --int=9 ../Programs/module25/task5/syscall_exec.xsm
+./xfs-interface load --int=10 ../Programs/module25/task5/syscall_exit.xsm
+./xfs-interface load --int=11 ../Programs/module25/task5/syscall_11.xsm
+./xfs-interface load --int=13 ../Programs/module25/task5/syscall_13.xsm
+./xfs-interface load --int=14 ../Programs/module25/task5/syscall_14.xsm
+./xfs-interface load --int=15 ../Programs/module25/task5/syscall_shutdown.xsm
+./xfs-interface load --module 0 ../Programs/module25/task5/module_resource.xsm
+./xfs-interface load --module 1 ../Programs/module25/task5/module_process.xsm
+./xfs-interface load --module 2 ../Programs/module25/task5/module_memory.xsm
+./xfs-interface load --module 3 ../Programs/module25/task5/module_file.xsm
+./xfs-interface load --module 4 ../Programs/module25/task5/module_device.xsm
+./xfs-interface load --module 5 ../Programs/module25/task5/module_scheduler.xsm
+./xfs-interface load --module 7 ../Programs/module25/task5/module_boot.xsm
+./xfs-interface load --exec ../Programs/module25/task5/merge.xsm
+./xfs-interface load --exec ../Programs/module25/task5/ls.xsm
+./xfs-interface load --exec ../Programs/module25/task5/rm.xsm
+./xfs-interface load --exec ../Programs/module25/task5/cp.xsm
+./xfs-interface load --exec ../Programs/module25/task5/cat.xsm
+
+echo "======================Files loaded======================="
+
+
+cd ../xsm/
+
+if [ "$1" = "debug" ]; then
+    ./xsm --debug --timer 1024
+else
+    ./xsm --timer 1024
+fi
+
+cd ../xfs-interface/
+./xfs-interface dump --inodeusertable
+mv inodeusertable.txt ../Programs/module25/task5/inodeusertable.txt
+./xfs-interface dump --rootfile
+mv rootfile.txt ../Programs/module25/task5/rootfile.txt
+
+cd ../Programs/module25/task5/

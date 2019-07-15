@@ -1,0 +1,232 @@
+//interrupt handler 5 (open (syscall 2), close (syscall 3), seek (syscall 6))
+
+alias curPID R0;
+alias curUser R1;
+alias curProcT R2;
+alias curPT R3;
+alias resTable R4;
+alias userSP R5;
+alias counter R14;
+alias returnValue R6;
+
+curPID = [SYSTEM_STATUS_TABLE + 1];
+curProcT = PROCESS_TABLE + 16 * curPID;
+curUser = [curProcT + 3];
+curPT = PAGE_TABLE_BASE + 20 * curPID;
+resTable = ([curProcT + 11]  + 1) * 512 - 16;
+userSP = SP;
+returnValue = [curPT + 2 * (userSP - 1) / 512] * 512 + (userSP - 1) % 512;
+
+
+//switching to kernel stack
+[curProcT + 13] = SP;
+SP = [curProcT + 11] * 512 - 1;
+
+
+alias syscall R7;
+syscall = [[curPT + 2 * (userSP - 5) / 512] * 512 + (userSP - 5) % 512];
+
+if(syscall == 2) then
+    //Open syscall (syscall number 2)
+    //Arguments - filename
+    //Return - fid (on success), -1 (file not found, not data/root file), -2 (open file table is full)
+    //       - -3 (process resource table is full)
+    //Link - http://exposnitc.github.io/os_design-files/open.html
+
+    //changing file mode and saving the argument from the stack to the registers
+    [curProcT + 9] = 2;
+    alias filename R8;
+    alias resourceTableIndex R9;
+    alias openFileIndex R10;
+    filename = [[curPT + 2 * (userSP - 4) / 512] * 512 + (userSP - 4) % 512];
+
+    //finding a free entry in the per-process resource table of the process
+    counter = 0;
+    while(counter < 8) do
+        if([resTable + 2 * counter] == -1) then
+            resourceTableIndex = counter;
+            break;
+        endif;
+        counter = counter + 1;
+    endwhile;
+
+    if(counter == 8) then
+        //resource table of the process is full, so return -3
+        [returnValue] = -3;
+        [curProcT + 9] = 0;
+        SP = [curProcT + 13];
+        ireturn;
+    endif;
+
+    //calling the Open function (3) in the file manger module (3) - returns the open file table index
+    //corresponding to the new open file instance
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R14);
+    R1 = 3;
+    R2 = filename;
+    call MOD_3;
+    openFileIndex = R0;
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R14);
+
+    if(openFileIndex < 0) then
+        //in this case either the file doesn't exists (openFileIndex = -1) or the open file table is full
+        //(openFileIndex = -2)
+        [returnValue] = openFileIndex;
+        [curProcT + 9] = 0;
+        SP = [curProcT + 13];
+        ireturn;
+    endif;
+
+    //setting the resource table entry
+    [resTable + 2 * resourceTableIndex] = FILE;
+    [resTable + 2 * resourceTableIndex + 1] = openFileIndex;
+
+    //store the return value and return
+    [returnValue] = resourceTableIndex;
+    [curProcT + 9] = 0;
+    SP = [curProcT + 13];
+    ireturn;
+
+endif;
+
+
+if(syscall == 3) then
+    //Close syscall (syscall number 3)
+    //Argument - process resource table index corresponding to the open file instance
+    //return value - 0 (success), -1 (invalid fid)
+    //Link - http://exposnitc.github.io/os_design-files/close.html
+
+    //setting the MODE flag and getting the argument
+    [curProcT + 9] = 3;
+    alias resourceTableIndex R8;
+    resourceTableIndex = [[curPT + 2 * (userSP - 4) / 512] * 512 + (userSP - 4) % 512];
+
+    if(resourceTableIndex < 0 || resourceTableIndex > 7 || [resTable + 2 * resourceTableIndex] != FILE) then
+        //if the file descriptor (argument) is not valid return -1
+        [curProcT + 9] = 0;
+        [returnValue] = -1;
+        SP = [curProcT + 13];
+        ireturn;
+    endif;
+
+    alias openFileIndex R9;
+    openFileIndex = [resTable + 2 * resourceTableIndex + 1];
+
+    //calling Close function (4) in the file manager module (3)
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R14);
+    R1 = 4;
+    R2 = openFileIndex;
+    call MOD_3;
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R14);
+
+    //invalidating the resource table entry
+    [resTable + 2 * resourceTableIndex] = -1;
+    [resTable + 2 * resourceTableIndex + 1] = -1;
+
+    //storing the return value and returning
+    [returnValue] = 0;
+    [curProcT + 9] = 0;
+    SP = [curProcT + 13];
+    ireturn;
+endif;
+
+
+if(syscall == 6) then
+    //seek syscall (syscall number 6)
+    //Arguments - File descriptor and offset
+    //Return value - 0 (success), -1 (file descriptor is invalid), -2 (offset moves the seek pointer outside the file)
+    //Link - http://exposnitc.github.io/os_design-files/seek.html
+
+    //changing the process mode to syscall number
+    [curProcT + 9] = 6;
+
+    //saving the arguments
+    alias fid R8;
+    alias offset R9;
+    fid = [[curPT + 2 * (userSP - 4) / 512] * 512 + (userSP - 4) % 512];
+    offset = [[curPT + 2 * (userSP - 3) / 512] * 512 + (userSP - 3) % 512];
+
+    //checking the per process resource table to check if the file descriptor is valid. If not return -1.
+    if([resTable + 2 * fid] != FILE) then
+        [returnValue] = -1;
+        [curProcT + 9] = 0;
+        SP = [curProcT + 13];
+        ireturn;
+    endif;
+
+    //finding the open file index and inode index corresponding to the file descriptor
+    alias openFileIndex R10;
+    alias inodeIndex R11;
+    alias inodeEntry R12;
+    openFileIndex = [resTable + 2 * fid + 1];
+    inodeIndex = [OPEN_FILE_TABLE + 4 * openFileIndex];
+    inodeEntry = INODE_TABLE + 16 * inodeIndex;
+
+    //calling AcquireInode function (4) of the resource manager module (0)
+    multipush(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12);
+    R1 = 4;
+    R2 = inodeIndex;
+    R3 = curPID;
+    call MOD_0;
+    multipop(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12);
+
+    if(R0 == -1) then
+        //if AcquireInode function fails, return -1
+        [returnValue] = -1;
+        [curProcT + 9] = 0;
+        SP = [curProcT + 13];
+        ireturn;
+    endif;
+
+    //getting lseek position from the open file table
+    alias lseekAddr R13;
+    alias fileSize R14;
+    lseekAddr = OPEN_FILE_TABLE + 4 * openFileIndex + 2;
+
+    //if the file is root file, then its size would be 480, otherwise check the inode table
+    if(inodeIndex == INODE_ROOT) then
+        fileSize = 480;
+    else
+        fileSize = [inodeEntry + 2];
+    endif;
+
+    if([lseekAddr] + offset < 0) then
+        //if the lseek after adding offset becomes negative return -2 after releasing the inode
+        multipush(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14);
+        R1 = 5;
+        R2 = inodeIndex;
+        R3 = curPID;
+        call MOD_0;
+        multipop(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14);
+
+        [returnValue] = -2;
+        [curProcT + 9] = 0;
+        SP = [curProcT + 13];
+        ireturn;
+    endif;
+
+    if(offset == 0) then
+        //if offset is zero the lseek would be set to the beginning of the file
+        [lseekAddr] = 0;
+    else
+        if([lseekAddr] + offset > fileSize) then
+            //if the offset makes lseek to go beyond the file, it is set to the file size
+            [lseekAddr] = fileSize;
+        else
+            //if the above two conditions are not satisfied the offset is added to lseek
+            [lseekAddr] = [lseekAddr] + offset;
+        endif;
+    endif;
+
+    //return 0, after releasing the inode
+    multipush(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14);
+    R1 = 5;
+    R2 = inodeIndex;
+    R3 = curPID;
+    call MOD_0;
+    multipop(R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14);
+
+    [returnValue] = 0;
+    [curProcT + 9] = 0;
+    SP = [curProcT + 13];
+    ireturn;
+endif;

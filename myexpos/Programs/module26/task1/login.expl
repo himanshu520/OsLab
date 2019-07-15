@@ -1,0 +1,24 @@
+int main() {
+    decl
+        str username, password;
+        int ignore, status;
+    enddecl
+
+    begin
+        while(1 == 1) do
+            ignore = exposcall("Write", -2, "Username");
+            ignore = exposcall("Read", -1, username);
+            ignore = exposcall("Write", -2, "Password");
+            ignore = exposcall("Read", -1, password);
+            status = exposcall("Login", username, password);
+            if(status == -1) then
+                ignore = exposcall("Write", -2, "InvCreden");
+            else
+                if(status == -2) then
+                    ignore = exposcall("Write", -2, "PermDenied");
+                endif;
+            endif;
+        endwhile;
+        return 0;
+    end
+}

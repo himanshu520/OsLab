@@ -1,0 +1,103 @@
+In this module we will implement semaphores for accessing shared resources.
+
+______________________________________________________________________________________________________________
+Access Control and Synchronisation
+==============================================================================================================
+Two processes sharing the same resource can't be in their critical section simultaneously. For this we
+use semaphores - a semaphore is simply a variable (or some other abstract data structure) that is used to
+solve this problem of non-simultaneous access of the critical section.
+eXpOS provides binary semaphore - this means that the semaphore has to states - set and reset.
+
+The following syscalls are used for access control using semaphores-
+    Semget - System call number 17 and interrupt routine 13
+            Get a semaphore. This semaphore is shared by the subsequent childs of the parent created
+                    through fork syscall. A process must acquire the corresponding semaphore and lock
+                    it before entering into critical section
+    SemLock - Lock the semaphore (for process (among those that are currently sharing the semaphore)
+                    that is calling the syscall). Any process that subsequently tries to lock the
+                    semaphore will get blocked until the semaphore is unlocked by the process that has
+                    locked the semaphore
+    SemUnlock - Unlock the semaphore from the calling process and then wake up all the processes waiting
+                for the semaphore
+    Semrelease - System call number 18 and interrupt routine 14
+            Release the semaphore acquired by the process
+
+
+______________________________________________________________________________________________________________
+Managing semaphores
+==============================================================================================================
+A process keeps record of the semaphores it has acquired through its per-process resource table.
+Per-process resource table consists of 8 entries, each of 2 words stored in the end of the kernel
+stack of the process. The first entry is the resource identifier (FILE - 0 or SEMAPHORE - 1).
+The second entry is the correspoding index in the open file table or semaphore table. Since, there
+are only 8 entries a process can't acquire more than eight resources simultaneously.
+
+The OS keeps record of the semaphores through the semaphore table. The semaphore table has MAX_SEM_COUNT
+(32) entries. Each entry is of 4 words and the last two words are unused. PROCESS_COUNT field stores the
+number of processes currently sharing the semaphore and the LOCKING_PID stores the process number
+that has locked the semaphore. If the semaphore is not locked then -1 is stored. An invalid entry
+corresponds the PROCESS_COUNT field being 0.
+
+The SPL constant SEMAPHORE_TABLE stores the starting address of the semaphore table. It is stored in
+the memory page 56. Calling semget returns a unique semaphore id which is the semaphore table index
+corresponding to semaphore.
+
+
+______________________________________________________________________________________________________________
+Semget syscall (syscall number 17)
+==============================================================================================================
+It finds a free entry in the resource table, acquires a semaphore and returns the found per-process table
+entry corresponding to the semaphore (a free entry in the resource table corresponds to the resource
+identifier field set to -1). For acquiring the semaphore, it calls the AcquireSemaphore function (number 6
+in resource manager module (module 0)) which returns the semaphore table entry corresponding
+to the acquired semaphore. This id is stored in the second field of the found entry in the resource table,
+the first field is set to SEMAPHORE (= 1) to indicate that the allocated resource is a semaphore and not
+a file.
+Return value of -1 means the resource table was full and of -2 means the semaphore table was full.
+
+Reference - http://exposnitc.github.io/os_design-files/semaphore_algos.html#semget
+
+
+
+______________________________________________________________________________________________________________
+Semrelease syscall (syscall number 18)
+==============================================================================================================
+This function release a semaphore and updates acquired by the process and also updates the process resource
+table and the OS semaphore table. The semaphore to be released is passed as an argument to the syscall.
+It returns 0 if the function completes successfully else returns -1.
+
+Reference - http://exposnitc.github.io/os_design-files/semaphore_algos.html#semrelease
+
+
+______________________________________________________________________________________________________________
+Acquire semaphore (function 6) and release semaphore (function 7) in the resource manager module (module 0)
+==============================================================================================================
+AcquireSemaphore function finds a free semaphore and returns its index. It also sets the semaphore's count
+and lockingPID fields to 1 and -1. It returns -1 if all the semaphores  are acquired already.
+
+Release semaphore function first checks if the semaphore is locked by the current process. If so, it unlocks
+it and also wakes up all the process that where waiting for the semaphore.
+Finally, it decreases the semaphore count field and returns.
+
+
+______________________________________________________________________________________________________________
+Semlock syscall (syscall number 19)
+==============================================================================================================
+This syscall is used to lock a semaphore acquired by a process. If the semaphore is already locked, the
+current process waits in a busy loop by calling the scheduler. When it finds the semaphore in unlocked
+state, locks it and the current process continue its execution.
+Returns 0 on success and -1 when the resource table entry to be locked is not valid.
+
+Reference - http://exposnitc.github.io/os_design-files/semaphore_algos.html#semlock
+
+______________________________________________________________________________________________________________
+Semunlock syscall (syscall number 20)
+==============================================================================================================
+This syscall is used to unlock a semaphore locked by a process. It unlocks the semaphore (by setting
+the locking PID field in the semaphore table to be -1) and then goes through system status table to
+find the processes which are waiting for this semaphore (the one being unlocked), and changes their
+state to READY.
+Returns 0 on success and -1 when the resource table entry is not valid and -2 if the process has not
+locked the semaphore
+
+Reference - http://exposnitc.github.io/os_design-files/semaphore_algos.html#semunlock

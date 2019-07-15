@@ -1,0 +1,3 @@
+#!/bin/bash
+./expl ../Programs/module11/task3/student.expl
+mv assemblycode.xsm ../Programs/module11/task3/student.xsm

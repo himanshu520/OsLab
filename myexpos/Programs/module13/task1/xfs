@@ -1,0 +1,10 @@
+#!/bin/bash
+./xfs-interface load --exhandler ../Programs/module13/task1/haltprog.xsm
+./xfs-interface load --int=10 ../Programs/module13/task1/haltprog.xsm
+./xfs-interface load --int=timer ../Programs/module13/task1/timer.xsm
+./xfs-interface load --os ../Programs/module13/task1/os_startup.xsm
+./xfs-interface load --init ../Programs/module13/task1/numbers.xsm
+./xfs-interface load --int=7 ../Programs/module13/task1/print.xsm
+./xfs-interface load --library ../expl/library.lib
+./xfs-interface load --idle ../Programs/module13/task1/idle.xsm
+./xfs-interface load --module 7 ../Programs/module13/task1/boot.xsm

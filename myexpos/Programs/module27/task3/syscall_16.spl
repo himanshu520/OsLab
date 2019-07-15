@@ -1,0 +1,240 @@
+//interrupt routine 16 (Newusr (syscall 22), Remusr (syscall 23), Setpwd (syscall 24), Getuname (syscall 25),
+//Getuid (syscall 26))
+
+alias curPID R0;
+alias curProcT R1;
+alias curPT R2;
+alias userSP R3;
+alias returnValue R4;
+alias syscall R5;
+
+curPID = [SYSTEM_STATUS_TABLE + 1];
+curProcT = PROCESS_TABLE + 16 * curPID;
+curPT = PAGE_TABLE_BASE + 20 * curPID;
+userSP = SP;
+returnValue = [curPT + 2 * ((userSP - 1) / 512)] * 512 + (userSP - 1) % 512;
+
+//switching to kernel stack and reading the syscall number
+[curProcT + 13] = userSP;
+SP = [curProcT + 11] * 512 - 1;
+syscall = [[curPT + 2 * ((userSP - 5) / 512)] * 512 + (userSP - 5) % 512];
+
+if(syscall == 22) then
+    //Newusr syscall
+    //Argument - username and password
+    //Return value - 0 (success), -1 (user already exists), -2 (permission denied), -3 (user limit reached)
+
+    //setting the MODE flag
+    [curProcT + 9] = 22;
+
+    //reading the arguments
+    alias username R6;
+    alias password R7;
+    username = [[curPT + 2 * ((userSP - 4) / 512)] * 512 + (userSP - 4) % 512];
+    password = [[curPT + 2 * ((userSP - 3) / 512)] * 512 + (userSP - 3) % 512];
+
+    //if the current user is not the root or the current process is not the shell return -2
+    if(curPID != 2 || [curProcT + 3] != 1) then
+        [returnValue] = -2;
+    else
+        alias ctr R8;
+        alias newuserid R9;
+        ctr = 0;
+        newuserid = -1;
+        while(ctr < MAX_USER_NUM) do
+            if([USER_TABLE + 2 * ctr] == username) then
+                break;
+            else
+                if(newuserid == -1 && [USER_TABLE + 2 * ctr] == -1) then
+                    newuserid = ctr;
+                endif;
+            endif;
+            ctr = ctr + 1;
+        endwhile;
+
+        if(ctr != MAX_USER_NUM) then
+            //the username already exists. Return -1
+            [returnValue] = -1;
+        else
+            if(newuserid == -1) then
+                //usertable is already full. Return -3
+                [returnValue] = -3;
+            else
+                //encrypt the password
+                encrypt password;
+                //add username and the encrypted password in the usertable
+                [USER_TABLE + 2 * newuserid] = username;
+                [USER_TABLE + 2 * newuserid + 1] = password;
+
+                //return 0
+                [returnValue] = 0;
+            endif;
+        endif;
+    endif;
+endif;
+
+
+if(syscall == 23) then
+    //Remusr syscall
+    //Argument - username and password
+    //Return value - 0 (success), -1 (user already exists), -2 (permission denied), -3 (user owns file)
+
+    //setting the MODE flag
+    [curProcT + 9] = 23;
+
+    //reading the arguments
+    alias username R6;
+    username = [[curPT + 2 * ((userSP - 4) / 512)] * 512 + (userSP - 4) % 512];
+
+    //if the current user is not the root or the current process is not the shell return -2
+    if(curPID != 2 || [curProcT + 3] != 1) then
+        [returnValue] = -2;
+    else
+        //if the user to be removed is root or kernel return -2
+        if(username == "root" || username == "kernel") then
+            [returnValue] = -2;
+        else
+            alias ctr R7;
+            alias userid R8;
+            ctr = 0;
+            while(ctr < MAX_USER_NUM) do
+                if([USER_TABLE + 2 * ctr] == username) then
+                    userid = ctr;
+                    break;
+                endif;
+                ctr = ctr + 1;
+            endwhile;
+
+            if(ctr == MAX_USER_NUM) then
+                //if the user is not found return -1
+                [returnValue] = -1;
+            else
+                //loop through the root file to check if the user is the owner of any file. If so return -3
+                ctr = 0;
+                while(ctr < MAX_FILE_NUM) do
+                    if([ROOT_FILE + 8 * ctr + 3] == username) then
+                        break;
+                    endif;
+                    ctr = ctr + 1;
+                endwhile;
+
+                if(ctr != MAX_FILE_NUM) then
+                    [returnValue] = -3;
+                else
+                    //invalidate the entries in the root file and return 0
+                    [USER_TABLE + 2 * userid] = -1;
+                    [USER_TABLE + 2 * userid + 1] = -1;
+
+                    [returnValue] = 0;
+                endif;
+            endif;
+        endif;
+    endif;
+endif;
+
+
+if(syscall == 24) then
+    //Setpwd syscall
+    //Argument - username and password
+    //Return value - 0 (success), -1 (permission denied), -2 (user does not exist)
+
+    //setting the MODE flag
+    [curProcT + 9] = 24;
+
+    //reading the arguments
+    alias username R6;
+    alias password R7;
+    username = [[curPT + 2 * ((userSP - 4) / 512)] * 512 + (userSP - 4) % 512];
+    password = [[curPT + 2 * ((userSP - 3) / 512)] * 512 + (userSP - 3) % 512];
+
+    //if the current process is not shell return -1
+    if(curPID != 2) then
+        [returnValue] = -1;
+    else
+        //loop through the usertable to find the userid of the user
+        alias ctr R8;
+        alias userid R9;
+        ctr = 0;
+        while(ctr < MAX_USER_NUM) do
+            if([USER_TABLE + 2 * ctr] == username) then
+                userid = ctr;
+                break;
+            endif;
+            ctr = ctr + 1;
+        endwhile;
+
+        if(ctr == MAX_USER_NUM) then
+            //if the user is not found then return -2
+            [returnValue] = -2;
+        else
+            //if the userid is not the same as that of the shell process or the userid is not 1 (root)
+            //return -1
+            if([curProcT + 3] != 1 && userid != [curProcT + 3]) then
+                [returnValue] = -1;
+            else
+                //update the usertable and return 0
+                encrypt password;
+                [USER_TABLE + 2 * userid + 1] = password;
+
+                [returnValue] = 0;
+            endif;
+        endif;
+    endif;
+endif;
+
+
+if(syscall == 25) then
+    //Getuname syscall
+    //Argument - userid
+    //Return value - username (success), -1 (invalid uid)
+
+    //setting the MODE flag
+    [curProcT + 9] = 26;
+
+    //reading the arguments
+    alias userid R6;
+    userid = [[curPT + 2 * ((userSP - 4) / 512)] * 512 + (userSP - 4) % 512];
+
+    if(userid < 0 || userid > 15) then
+        [returnValue] = -1;
+    else
+        //if the userid field is invalid, then corresponding field would be -1 in the user table
+        [returnValue] = [USER_TABLE + 2 * userid];
+    endif;
+endif;
+
+
+if(syscall == 26) then
+    //Getuid syscall
+    //Argument - username
+    //Return value - uid (success), -1 (invalid username)
+
+    //setting the MODE flag
+    [curProcT + 9] = 25;
+
+    //reading the arguments
+    alias username R6;
+    username = [[curPT + 2 * ((userSP - 4) / 512)] * 512 + (userSP - 4) % 512];
+
+    //loop through the user table to find the username
+    alias ctr R7;
+    ctr = 0;
+    while(ctr < MAX_USER_NUM) do
+        if([USER_TABLE + 2 * ctr] == username) then
+            [returnValue] = ctr;
+            break;
+        endif;
+        ctr = ctr + 1;
+    endwhile;
+
+    //if the user is not found in  the user table return -1
+    if(ctr == MAX_USER_NUM) then
+        [returnValue] = -1;
+    endif;
+endif;
+
+
+//reset the mode flag and switch to kernel stack. Finally return
+[curProcT + 9] = 0;
+SP = [curProcT + 13];
+ireturn;

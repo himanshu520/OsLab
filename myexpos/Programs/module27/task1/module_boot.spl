@@ -1,0 +1,324 @@
+//boot module (module 7)
+
+//loading the INIT program
+loadi(65, 7);
+
+//loading the shell program
+loadi(67, 9);
+loadi(68, 10);
+
+//loading INT=4 (Create(1), Delete(4) syscalls) routine
+loadi(10, 23);
+loadi(11, 24);
+
+//loading INT=5 (Open(2), Close(3), Seek(6) syscalls) routine
+loadi(12, 25);
+loadi(13, 26);
+
+//loading INT=6 (Read(7) syscall) routine
+loadi(14, 27);
+loadi(15, 28);
+
+//loading INT=7 (Print(5) syscall) routine
+loadi(16, 29);
+loadi(17, 30);
+
+//loading INT=8 (Fork(8) syscall) routine
+loadi(18, 31);
+loadi(19, 32);
+
+//loading INT=9 (Exec(9) syscall) routine
+loadi(20, 33);
+loadi(21, 34);
+
+//loading INT=10 (Exit(10) syscall) routine
+loadi(22, 35);
+loadi(23, 36);
+
+//loading INT=11 (Wait(13), Signal(14), Getpid(11), Getppid(12) syscalls) routine
+loadi(24, 37);
+loadi(25, 38);
+
+//loading INT=12 (Logout(28) syscall) routine
+loadi(26, 39);
+loadi(27, 40);
+
+//loading INT=13 (Semget(17) and Semrelease(18) syscalls) routine
+loadi(28, 41);
+loadi(29, 42);
+
+//loading INT=14 (Semlock(19) and Semunlock(20) syscalls) routine
+loadi(30, 43);
+loadi(31, 44);
+
+//loading INT=15 (Shutdown(21) syscall) routine
+loadi(32, 45);
+loadi(33, 46);
+
+//loading INT=16 (Newusr(22), Remusr(23), Setpwd(24), Getuname(25), Getuid(26) syscalls) routine
+loadi(34, 47);
+loadi(35, 48);
+
+//loading INT=17 (Login(27) syscall) routine
+loadi(36, 49);
+loadi(37, 50);
+
+//loading exception handler
+loadi(2, 15);
+loadi(3, 16);
+
+//loading the timer interrupt handler
+loadi(4, 17);
+loadi(5, 18);
+
+//loading the disk interrupt handler
+loadi(6, 19);
+loadi(7, 20);
+
+//loading the console interrupt handler
+loadi(8, 21);
+loadi(9, 22);
+
+//loading the library
+loadi(63, 13);
+loadi(64, 14);
+
+//loading the resource manager module (module 0)
+loadi(40, 53);
+loadi(41, 54);
+
+//loading the process manager module (module 1)
+loadi(42, 55);
+loadi(43, 56);
+
+//loading the memory manager module (module 2)
+loadi(44, 57);
+loadi(45, 58);
+
+//loading the file manager module (module 3)
+loadi(46, 59);
+loadi(47, 60);
+
+//loading the device manager module (module 4)
+loadi(48, 61);
+loadi(49, 62);
+
+//loading the scheduler module (module 5)
+loadi(50, 63);
+loadi(51, 64);
+
+//loading the pager module (module 6)
+loadi(52, 65);
+loadi(53, 66);
+
+//loading the inode-user table
+loadi(59, 3);
+loadi(60, 4);
+
+//loading the root file
+loadi(62, 5);
+
+//loading disk free list
+loadi(61, 2);
+
+
+
+//Setting the Page Table for the INIT program (here pid = 1)
+
+//Library
+[PAGE_TABLE_BASE+20] = 63;
+[PAGE_TABLE_BASE+21] = "0100";
+[PAGE_TABLE_BASE+22] = 64;
+[PAGE_TABLE_BASE+23] = "0100";
+
+//Heap
+[PAGE_TABLE_BASE+24] = -1;
+[PAGE_TABLE_BASE+25] = "0000";
+[PAGE_TABLE_BASE+26] = -1;
+[PAGE_TABLE_BASE+27] = "0000";
+
+//Code - load only first code page of the init process from disk to memory
+[PAGE_TABLE_BASE+28] = 65;
+[PAGE_TABLE_BASE+29] = "0100";
+[PAGE_TABLE_BASE+30] = -1;
+[PAGE_TABLE_BASE+31] = "0000";
+[PAGE_TABLE_BASE+32] = -1;
+[PAGE_TABLE_BASE+33] = "0000";
+[PAGE_TABLE_BASE+34] = -1;
+[PAGE_TABLE_BASE+35] = "0000";
+
+//Stack
+[PAGE_TABLE_BASE+36] = 66;
+[PAGE_TABLE_BASE+37] = "0110";
+[PAGE_TABLE_BASE+38] = -1;
+[PAGE_TABLE_BASE+39] = "0000";
+
+//Storing the IP in the top of the user stack
+[33792] = [33281];                                  //[66 * 512] = [65 * 512 + 1]
+
+//Setting the process table for the init program
+[PROCESS_TABLE + 16] = 0;                           //tick
+[PROCESS_TABLE + 17] = 1;                           //pid
+[PROCESS_TABLE + 18] = -1;                          //ppid
+[PROCESS_TABLE + 19] = 0;                           //userid
+[PROCESS_TABLE + 20] = CREATED;                     //state
+[PROCESS_TABLE + 27] = 77;                          //user area page
+[PROCESS_TABLE + 28] = 0;                           //UPTR
+[PROCESS_TABLE + 29] = 8 * 512;                     //KPTR
+[PROCESS_TABLE + 30] = PAGE_TABLE_BASE + 20;        //PTBR
+[PROCESS_TABLE + 31] = 10;                          //PTLR
+
+//initialising the per process resource table for the init process
+alias ctr R0;
+alias initResourceTable R1;
+initResourceTable = 39920;                          //78 * 512 - 16
+ctr = 0;
+while(ctr < 16) do
+    [initResourceTable] = -1;
+    ctr = ctr + 1;
+    initResourceTable = initResourceTable + 1;
+endwhile;
+
+
+
+//Setting the Page Table for the Shell process (here pid = 2)
+
+//Library
+[PAGE_TABLE_BASE+40] = 63;
+[PAGE_TABLE_BASE+41] = "0100";
+[PAGE_TABLE_BASE+42] = 64;
+[PAGE_TABLE_BASE+43] = "0100";
+
+//Heap
+[PAGE_TABLE_BASE+44] = -1;
+[PAGE_TABLE_BASE+45] = "0000";
+[PAGE_TABLE_BASE+46] = -1;
+[PAGE_TABLE_BASE+47] = "0000";
+
+//Code
+[PAGE_TABLE_BASE+48] = 67;
+[PAGE_TABLE_BASE+49] = "0100";
+[PAGE_TABLE_BASE+50] = 68;
+[PAGE_TABLE_BASE+51] = "0100";
+[PAGE_TABLE_BASE+52] = -1;
+[PAGE_TABLE_BASE+53] = "0000";
+[PAGE_TABLE_BASE+54] = -1;
+[PAGE_TABLE_BASE+55] = "0000";
+
+//Stack
+[PAGE_TABLE_BASE+56] = 78;
+[PAGE_TABLE_BASE+57] = "0110";
+[PAGE_TABLE_BASE+58] = 79;
+[PAGE_TABLE_BASE+59] = "0110";
+
+//Storing the IP in the top of the user stack
+[39936] = [34305];                                  //[78 * 512] = [67 * 512 + 1];
+
+//Setting the process table for the shell program
+[PROCESS_TABLE + 32] = 0;                           //tick
+[PROCESS_TABLE + 33] = 2;                           //pid
+[PROCESS_TABLE + 34] = -1;                          //ppid
+[PROCESS_TABLE + 35] = 0;                           //userid
+[PROCESS_TABLE + 36] = TERMINATED;                  //state
+[PROCESS_TABLE + 43] = 80;                          //user area page
+[PROCESS_TABLE + 44] = 0;                           //UPTR
+[PROCESS_TABLE + 45] = 8 * 512;                     //KPTR
+[PROCESS_TABLE + 46] = PAGE_TABLE_BASE + 40;        //PTBR
+[PROCESS_TABLE + 47] = 10;                          //PTLR
+
+//initialising the per process resource table for the shell process
+initResourceTable = 41456;                          //81 * 512 - 16
+ctr = 0;
+while(ctr < 16) do
+    [initResourceTable] = -1;
+    ctr = ctr + 1;
+    initResourceTable = initResourceTable + 1;
+endwhile;
+
+//setting the diskmap table for the shell process
+[DISK_MAP_TABLE + 20] = -1;     //user area page
+[DISK_MAP_TABLE + 21] = -1;     //unallocated
+[DISK_MAP_TABLE + 22] = -1;     //heap
+[DISK_MAP_TABLE + 23] = -1;     //heap
+[DISK_MAP_TABLE + 24] = 9;      //code
+[DISK_MAP_TABLE + 25] = 10;     //code
+[DISK_MAP_TABLE + 26] = -1;     //code
+[DISK_MAP_TABLE + 27] = -1;     //code
+[DISK_MAP_TABLE + 28] = -1;     //stack
+[DISK_MAP_TABLE + 29] = -1;     //stack
+
+
+
+//setting the process state of all the processes, other than idle, init, shell to "TERMINATED"
+//and also initialising the TICK fields to 0
+ctr = 3;
+while(ctr < MAX_PROC_NUM) do
+    alias procT R10;
+    procT = PROCESS_TABLE + 16 * ctr;
+    [procT] = 0;
+    [procT + 4] = TERMINATED;
+    ctr = ctr + 1;
+endwhile;
+
+//setting the state of the terminal and disk acquisitions in corresponding status tables
+[TERMINAL_STATUS_TABLE] = 0;
+[DISK_STATUS_TABLE] = 0;
+
+//initialising memory free list (pages upto page number 80 are used)
+ctr = 0;
+while(ctr < 128) do
+    if(ctr <= 80) then
+        [MEMORY_FREE_LIST + ctr] = 1;
+    else
+        [MEMORY_FREE_LIST + ctr] = 0;
+    endif;
+    ctr = ctr + 1;
+endwhile;
+
+//initialising system status table
+[SYSTEM_STATUS_TABLE + 2] = 47;                 //MEM_FREE_COUNT
+[SYSTEM_STATUS_TABLE + 3] = 0;                  //WAIT_MEM_COUNT
+[SYSTEM_STATUS_TABLE + 4] = 0;                  //SWAPPED_COUNT
+[SYSTEM_STATUS_TABLE + 5] = -1;                 //PAGING_PROCESS
+
+//initialising the semaphore table by initialising the count field to 0 and locking PID field to -1
+//for each entry
+ctr = 0;
+while(ctr < MAX_SEM_COUNT) do
+    alias semaphoreTable R10;
+    semaphoreTable = SEMAPHORE_TABLE + 4 * ctr;
+    [semaphoreTable] = 0;
+    [semaphoreTable + 1] = -1;
+    ctr = ctr + 1;
+endwhile;
+
+//initialisng BufferTable by setting BlockNumber and LockingPID fields to -1 and DirtyBit to 0
+ctr = 0;
+while(ctr < 4) do
+    alias bufferTable R10;
+    bufferTable = BUFFER_TABLE + 4 * ctr;
+    [bufferTable] = -1;          //BlockNumber
+    [bufferTable + 1] = 0;       //DirtyBit
+    [bufferTable + 2] = -1;      //LockingPID
+    [bufferTable + 3] = -1;      //Unused
+    ctr = ctr + 1;
+endwhile;
+
+//initialising the file status table by setting the LockingPID and OpenFileCount to -1 for all entries
+ctr = 0;
+while(ctr < 4 * MAX_FILE_NUM) do
+    [FILE_STATUS_TABLE + ctr] = -1;
+    ctr = ctr + 1;
+endwhile;
+
+//initialising the openFileTable by setting the inode index fields to -1 and open instance count to 0
+ctr = 0;
+while(ctr < MAX_OPENFILE_NUM) do
+    alias openFileTable R10;
+    openFileTable = OPEN_FILE_TABLE + 4 * ctr;
+    [openFileTable] = -1;
+    [openFileTable + 1] = 0;
+    ctr = ctr + 1;
+endwhile;
+
+return;

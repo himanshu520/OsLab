@@ -1,0 +1,34 @@
+int main() {
+    decl
+        int ignore, uid, fid;
+        str filename, username, uname;
+    enddecl
+
+    begin
+        ignore = exposcall("Write", -2, "Username");
+        ignore = exposcall("Read", -1, username);
+        uid = exposcall("Getuid", username);
+        if(uid < 0) then
+            ignore = exposcall("Write", -2, "InvUname");
+        else
+            fid = exposcall("Open", "root");
+            if(fid < 0) then
+                ignore = exposcall("Write", -2, "Error");
+            else
+                while(1 == 1) do
+                    ignore = exposcall("Read", fid, filename);
+                    if(ignore == -2) then
+                        break;
+                    endif;
+                    ignore = exposcall("Seek", fid, 2);
+                    ignore = exposcall("Read", fid, uname);
+                    if(uname == username) then
+                        ignore = exposcall("Delete", filename);
+                    endif;
+                endwhile;
+                ignore = exposcall("Write", -2, "Done");
+            endif;
+        endif;
+        return 0;
+    end
+}

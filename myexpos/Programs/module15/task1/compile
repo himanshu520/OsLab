@@ -1,0 +1,10 @@
+#!/bin/bash
+./spl ../Programs/module15/task1/os_startup.spl
+./spl ../Programs/module15/task1/timer.spl
+./spl ../Programs/module15/task1/haltprog.spl
+./spl ../Programs/module15/task1/print.spl
+./spl ../Programs/module15/task1/boot.spl
+./spl ../Programs/module15/task1/int10.spl
+./spl ../Programs/module15/task1/scheduler.spl
+./spl ../Programs/module15/task1/module0.spl
+./spl ../Programs/module15/task1/deviceManager.spl

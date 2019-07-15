@@ -1,0 +1,105 @@
+In this module, we would implement a preliminary version of Round Robin scheduling algorithm as a module.
+We will create another user process (other than init and idle) and schedule its execution using timer
+interrupt.
+
+
+______________________________________________________________________________________________________________
+Introduction
+==============================================================================================================
+Using the --exec command of the xfs-interface we can load an executable file in the disk. The xfs-interface
+will automatically create an inode table and root file entry for the executable. From the inode table entry
+we can find the disk blocks where the files are loaded by the xfs-interface.
+
+
+The eXpOS implementation stipulates the scheduler to be implemented as MODULE_5. This is loaded into disk
+block 63 and 64 and pages 50 and 51 in the memory.
+
+The eXpOS implementation can have 16 processes running at a time. So, there are a total of 16 entries in
+the process table. When a process is not scheduled marking the corresponding process table entry in the
+process table (5 entry (1-based)) as "TERMINATED" can be very useful during scheduling.
+
+
+
+______________________________________________________________________________________________________________
+Control flow
+==============================================================================================================
+The scheduler is called by the timer interrupt service routine handler. The stack used during the schduling
+will be the kernel stack of the currently executing process. The scheduler presumes that the timer interrupt
+handler would have saved the context (R0 - R19 and BP) of the user program in stack and the process
+state has been changed to READY. The SP will be pointing to the top of the kernel stack after the call.
+
+The scheduler saves the SP, PTBR and PTLR to the process table entry of the process. Next it decides which
+process to run. Having done so, it load the SP, PTLR, PTBR registers from the process table entry of the
+process and also updates the PID in the system status table. If the status of the process is READY, it
+changes it to RUNNING and then returns using 'return'.
+
+Now, one thing to notice is that by the eXpOS implementation, the modules can be called only from the
+system mode. So, this is true even for the scheduler. Hence, the address to which the scheduler would
+return must be stored in top of the kernel stack of the process to which we have to return. This is
+true if the process which we are scheduling was already running (currently in READY state). However, if
+the process is to be run for the first time (currently its in CREATED state) then the kernel stack
+would be empty and there is no return address on the top of the stack (kernel stack). The scheduler in
+this case loads the PTLR and PTBR registers from the process table entry of the process and then
+sets the stack pointer to point to the top of the user stack and then the schduler directly starts
+user process by executing ireturn statement - going to user mode.
+
+Now, if the process being scheduled was already running (sometime in the past), then the execution
+will start from the address stored on the top of the kernel stack. This will be the address of the timer
+interrupt which will restore the context of the user registers and the new process will begin its
+execution.
+
+
+______________________________________________________________________________________________________________
+Stack management during kernel module call
+==============================================================================================================
+The modules can be invoked only from other modules and some kernel routines like interrupt handler etc. - so
+module is always invoked in the kernel mode. The module uses the stack of the same kernel stack as the
+process from which it was called. The module expects that the caller has saved its context before the call.
+
+The arguments are passed in register R1, R2, R3, .... The module returns value through R0. The return address
+is on the top of the stack. The module has to free up any space it used during its execution by popping off
+values from the stack. Upon return the caller restores its context and then begins its execution.
+
+Reference - http://exposnitc.github.io/os_design-files/stack_module.html
+
+
+
+______________________________________________________________________________________________________________
+Stack management during context switch
+==============================================================================================================
+Context switch refers to execution of new process even before the currently running process has finished its
+execution. This involves saving all the volatile data of the currently running process (that is its context)
+and then loading the context of the new process. This allows us to run multiple process at the same time.
+The context of the current process is saved into its kernel stack and the context of the new process is loaded
+from its kernel stack.
+
+There are two situations in which context switch may occur -
+    the first is when the time slice of the currently executing process has expired and the schduler process
+        (MOD_5) is called from the timer interrupt module.
+    the second is when a process has to wait for some other event to happen before proceeding further and
+        hence volutarily invokes the scheduler to schedule itself out.
+
+
+Case 1 -
+    In this case the timer interrupt saves the context of the currently running process in its kernel stack
+    and then calls the scheduler which finds the next process to be run and loads its context - then return
+    to the timer interrupt handler from the address stored in the stack top of the new process. So, when
+    ireturn instruction is executed from the timer interrupt handler, the new process begins its execution
+    from the point where it left off.
+Case 2 -
+    In this case the scheduler was called from some other kernel code - like blocking system call / exception
+    handler etc. In this case it is the duty of the module / handler to save the context in its kernel stack
+    before calling the scheduler. And when later the scheduler returns the module/handler has to restore the
+    context back.
+    Note - the following statement has been written in the documentation in the link below -
+        "In spite of the above convention, the ExpL compiler fails to save the value of BP register before
+        making a system call. To solve this problem, a patch is added to the scheduler so that the scheduler
+        saves the current value of BP register to the kernel stack of the process being scheduled out."
+
+The first case only handles the case when the time slice of the user process has ended. All other things
+are convered in the second case.
+
+Also, the calling process should have set the state field of the process in the process table before
+executing the call - this tells the scheduler the reason why/how it was invoked. If this field is not
+set then the scheduler could not know how/why it was called.
+Reference - http://exposnitc.github.io/os_design-files/timer_stack_management.html

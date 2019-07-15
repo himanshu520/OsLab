@@ -1,0 +1,57 @@
+//timer interrupt handler (int=timer)
+//Link - http://exposnitc.github.io/os_design-files/timer.html
+
+//switching to kernel stack
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13] = SP;
+SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 11] * 512 - 1;
+
+//backing up the context of the current process
+backup;
+
+alias curPID R0;
+alias curProcT R1;
+curPID = [SYSTEM_STATUS_TABLE + 1];
+curProcT = PROCESS_TABLE + 16 * curPID;
+
+//if the current process is not the IDLE process then initiate the swapping operations
+if(curPID != 0) then
+	if([SYSTEM_STATUS_TABLE + 2] < MEM_LOW) then
+		//call SwapOut function (1) of the pager module (6) if free memory pages is less than MEM_LOW
+		multipush(R0, R1);
+		R1 = 1;
+		R2 = curPID;
+		call MOD_6;
+		multipop(R0, R1);
+	endif;
+
+	if([SYSTEM_STATUS_TABLE + 2] > MEM_HIGH) then
+		//call SwapIn function (2) of the pager module (6) if the free memory pages is more than MEM_HIGH
+		multipush(R0, R1);
+		R1 = 2;
+		R2 = curPID;
+		call MOD_6;
+		multipop(R0, R1);
+	endif;
+endif;
+
+//changing the state of the current process to READY
+[curProcT + 4] = READY;
+
+//incrementing the TICK field of all the process
+alias ctr R3;
+ctr = 0;
+while(ctr < MAX_PROC_NUM) do
+	[PROCESS_TABLE + 16 * ctr] = [PROCESS_TABLE + 16 * ctr] + 1;
+	ctr = ctr + 1;
+endwhile;
+
+//calling the scheduler (context switch) module
+call MOD_5;
+
+//restoring the context of the process
+restore;
+SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13];
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 0;
+
+//returning control to the newly scheduled process
+ireturn;

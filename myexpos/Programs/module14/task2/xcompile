@@ -1,0 +1,9 @@
+#!/bin/bash
+./expl ../Programs/module14/task2/idle.expl
+mv assemblycode.xsm ../Programs/module14/task2/idle.xsm
+./expl ../Programs/module14/task2/init.expl
+mv assemblycode.xsm ../Programs/module14/task2/init.xsm
+./expl ../Programs/module14/task2/even.expl
+mv assemblycode.xsm ../Programs/module14/task2/even.xsm
+./expl ../Programs/module14/task2/primes.expl
+mv assemblycode.xsm ../Programs/module14/task2/primes.xsm

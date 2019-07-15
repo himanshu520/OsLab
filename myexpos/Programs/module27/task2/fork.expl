@@ -1,0 +1,45 @@
+decl
+    int x, ignore, ctr, nctr, pid[4];
+enddecl
+
+int main() {
+
+    begin
+        ctr = 0;
+        while(ctr < 4) do
+            pid[ctr] = -1;
+            ctr = ctr + 1;
+        endwhile;
+
+        ctr = 0;
+        while(ctr < 4) do
+            x = exposcall("Fork");
+            if(x < 0) then
+                ignore = exposcall("Write", -2, "ForkFail");
+            else
+                if(x == 0) then
+                    nctr = 0;
+                    while(nctr < 4) do
+                        pid[nctr] = -1;
+                        nctr = nctr + 1;
+                    endwhile;
+                else
+                    pid[ctr] = x;
+                endif;
+            endif;
+            ctr = ctr + 1;
+        endwhile;
+
+        ctr = 0;
+        while(ctr < 4) do
+            x = exposcall("Wait", pid[ctr]);
+            ctr = ctr + 1;
+        endwhile;
+
+        x = exposcall("Exec", "pid.xsm");
+        if(x < 0) then
+            ignore = exposcall("Write", -2, "ExecFail");
+        endif;
+        return 0;
+    end
+}

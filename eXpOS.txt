@@ -1,0 +1,264 @@
+eXpFS file system organisation
+    files organized in a single directory called the root
+    root is also treated as a file
+    each eXpFS file has three attributes - name, size and type - each being one word long
+    file name must be a unique - string
+    file size is the total number of words in it
+    three types of eXpFS files - the root, data files and executable files - each has an entry in the root - root entry
+
+    root file
+        root file has name root - contains metadata (name, type, size - root entry) about files stored. The first entry is the
+        root itself
+        the operations are open, close, read and seek
+        the owner is kernel (user=0) and permission is exclusive (=0)
+
+    data file
+        data file is a sequence of words - MAX_FILE_SIZE determines the size of the largest file
+        Any file other than root and an executable is treated as a data file
+        the CREATE system call automatically sets the file type as data in the root file during creation through system call to
+        DATA
+        application programs can perform - open, close, read, write, delete, create, seek on a data file - through system calls
+        only data files can be created by application programs
+
+    a file loaded through xfs-interface has root as owner and permission open to all
+
+    executable file
+        executable files has root entry as EXEC
+        eXpOS doesn't allow application programs to create executables. They can be loaded externally through xfs-interface
+        executable files has structure called executable file format
+        (* later reading - API and ABI (application binary interface) *)
+
+xfs-interface
+    it is an external interface to the eXpOS file system in the host system
+    the file system is simulated in a binary file called disk.xfs
+    the external os can format the disk, load executable and data files, list files, copy specified block from eXpOS file system
+    to the host os.
+    from xfs-interface directory use command ./xfs-interface to launch
+    we can also give a single command as a command line argument to run
+    various commands in the xfs-interface
+
+        help
+            displays  general syntax and functions of all commands
+
+        fdisk
+            creates the disk or formats it if already exists
+            the defaults are initialised
+
+        load
+            used to load file from the host system to eXpOS file system
+            the first argument is the type of the file
+                --exec, --data, --init, --os, --idle, --shell
+                (Read for other possibilities)
+
+            the second argument is file path
+            checks the size of the fiel and allocates required blocks
+            updates disk free list, creates inode table and root file entries
+
+        export
+            used to export the data files from the XFS-disk to host os.
+            first argument is the file to be exported
+            second argument is teh path where the file is to be stored
+            if second argument is skipped it is saved in the xfs-interface directory with name same as the exported file
+
+        rm
+            used to delete a file from the xfs disk
+            the only argument is the file name to be removed
+            only data and executables can be removed
+            the command searches the inode table for the file to be removed
+            updates the inode table, root file and disk free list
+
+        ls
+            lists the files in the file system
+
+        df
+            shows the disk's free list
+            also displays the total blocks and number of free blocks
+
+        cat
+            it takes a filename as an argument and displays its contents
+
+        copy
+            it takes <start_block>, <end_block> and <unix_filename> as arguments
+            copies the blocks into the file
+            the file is stored in xfs-interface
+
+        dump
+            used to export the disk data structures to predefined files depending on its argument
+
+            --inodeusertable
+                copies inode and user table to inodeusertable.txt
+            --rootfile
+                copies the rootfile to rootfile.txt
+
+            the copied files can be found in the xfs-interface directory
+
+        run
+            it takes the path of a file and run the xfs-interface commands mentioned there sequentially
+            the commands must be separated by comma
+        exit
+            to quit the interface
+
+
+XSM disk
+    XSM disk contains 512 blocks, each storing 512 words
+    data is stored in the disk in eXpFS filesystem format - specifies how the data and the metadata are stored in the filesystem.
+    the format specifies
+        each data/executable file can span atmost four blocks
+        the index of the blocks, filename, size must be stored in predefined area - inode table (in blocks 3 and 4 along
+        with user table)
+    disk free list
+        it is stored in block 2
+        keeps track of used and unused blocks
+        can be viewed using df command in the xfs-interface
+        0 indicates free block and 1 indicates a used block
+        the first 69 blocks are used for disk structure, os-routines, shell code, idle code, init-program
+        the remaining
+    loading files allocates the first free block
+
+
+Virtual Machine Model
+    VMM defines the view of the machine as seen by the user mode programs. User mode programs run in unprivileged mode and
+    also has various other restrictions - like can not use all the instructions, restricted address space (virtual / logical
+    address), restricted
+    registers.
+    Registers available
+        Only R0-R19, IP, BP, SP can be used in the user mode
+    Virtual address
+        The virtual address that can be generated by a user mode program is determined by the contents of the PTLR register.
+        The address must be within the range [0, 512 * PTLR - 1]. The address translation scheme is used to translate
+        the logical address into a physical address
+    the virtual address space is divided by xsm into various sections that the user program can access - library, code, data,
+    stack, heap.
+    software interrupts are the mechanism by which the user mode programs can transfer control to code that runs in the kernel
+    mode. A total of 15 (4 - 18)  software interrupts are available for the applications running in user mode.
+
+    Address Translation
+        Page table
+            every user mode program running has an associated page table which is a data structure that maps its virtual address 
+            space to the machines physical address space.
+            page table is the meta-data about the running program stored by the OS and the running program has no access
+            to it.
+            for the translation to work the PTBR and PTLR registers must hold the base address of the page table and the
+            no of entries in the page table.
+            the page table is set in the priveleged mode
+            each page table stores the physical page number corresponding to each logical page of the user mode program
+            each entry in the page table consists of two words
+                the first word is the physical page number of the logical page
+                the second word consists of flag bits that storing information about the page
+                    Referenced bit (R) - this specifies whether the page table has been referenced or not, initially it is 0
+                    valid/invalid bit (V) - indicates whether this page table entry is valid or not
+                    write bit (W) - tells whether the user mode program is allowed to write (1) in the page or not (0).
+                    Dirty bit (D) - tells whether the content in the page table has been modified by the user program
+
+                if any access is made to a page table whose entry has invalid bit set or is read only then the control
+                is passed to the exception handler
+
+        calculation of actual address
+            logical address divided by the page table size gives the logical page number being refernced
+            the physical address to the start of the logical page table can be obtained by looking at the page table of the
+            user program - the entry at the PTBR + (logical page number * no. of words in a page table entry (here 2))
+            now the offset from the starting of the actual physical page table can be calculated as logical address %
+            page table size
+            so the actual physical address can be obtained by adding this offset to the address obtained in step 2.
+
+        XSM machine has a total of 128 physical pages.
+        the actual translation of the addresses, on the fly during the program execution, requires support from the hardware
+
+    before running a program in user mode the OS must set up the page table and PTLR and PTBR registers of the
+    user program. The steps are
+            first set up the PTLR
+            then allocate space for the actual page table and then set up the PTBR to this address
+            set up the application's stack and the value in SP to point to its top
+            calculate the physical address corresponding to the logical address in the SP and then store the logical address
+            of the first instruction in this physical address and then execute IRET.
+
+        the valid bit and the read-only/read-write bits must be set by the os before the execution enters the
+        unpriveleged mode. However, the reference and the dirty flag are maintained by the machine as the program executes
+
+        most of the application programs are written in such a way that they are meant to be loaded in some
+        particular page of the logical address space. If loaded in some other pages the code may run into error
+        (suppose the code has a jump statement that translates to a logical address in the 3 page. Now for the
+        jump to make sense there must be some executable code in the this referenced logical address. Now, suppose
+        the os instead of putting the code in page three puts it into page 5 - this would cause the program to crash)
+
+        Now, how would the OS decide where to place the code - unless there is some agreement between the os designer
+        and the application code designer, it is not possible to design a successful os.
+        The solution is that every OS has an Application Binary Interface (ABI), that fixes this problem and other points
+        that an application programmer must keep in mind while he is designing an application program.
+
+        For eXpOS the application program is placed in the page tables 4, 5, 6, 7. The stack is supposed to be placed in page 
+        table 8 and 9. The stack pointer when the program is started should thus be made to point to 4095 (and not 4096, how ??)
+
+        the write bit of the executable code must be set 0. For the stack it must be 1.
+
+        How the stack is used must be left to the program. But, there are INT instructions through which the program
+        control is passed to the privelged mode and the IRET instruction through which the program control is
+        passed back the the user program in the unpriveleged mode. So, as discussed previously again a mutual aggrement
+        is needed for the setting up of the space allocation for the stack. The eXpOS ABI specifies it to be pages 8 and 9.
+
+        In the fourth step mentioned above the OS is required to pass the logical address of the first instruction
+        in the stack. But how does the OS knows, which is the first instruction to be executed. The answer again is
+        ABI. For eXpOS the ABI specification states that the application programs (XEXE format) must start with a 8-word
+        header (before the actual code) that gives info about the program. The first word is always set to 0. the second
+        word called the entry point gives the logical address of the first instruction to be executed.
+
+        Since, a program must fit into 4 pages (512 words each) and each instruction is of 2 words, a XEXE program can
+        contain 1024 instructions. But since an XEXE file must start with an eight-word header, it reduces the instruction
+        count by 4. So, a XEXE executable can have a maximum of 1020 instructions.
+
+        An interrupt (INT n, where n is from 4 to 18) can be used to pass the control back to the priveleged mode.
+            SP is incremented, the address of the next instruction is copied on to the stack
+            IP is loaded with the address of the interrupt handler (corresponding to n)
+            machine is switched to the priveleged mode
+
+    Interrupt vector table
+        It is used to map the interrupts to corresponding interrupt handler programs
+        In eXpOS the interrupt vector table is stored from physical address 492 - the first four are exception handler,
+        time interrupt handler, disk interrupt handler, console interrupt handler. Then the next 15 are software interrupt
+        handlers. These addresses are hard coded into the ROM code and hence cannot be changed
+
+    System Call Routine
+        OS handlers that can be called from an application program for priveleged tasks are call system call routines
+        software interrupts provide mechanism for implementing system calls
+
+
+ABI and XEXE format
+    load the shared library into memory pages 63 and 64 from disk blocks 13 and 14. this pages must be included in the logical
+    page 0 and 1 of each process.
+    the dynamic memory allocation functions of the library manages the heap memory of the application program. The ABI
+    stipulates that each appliction must provide 2 pages of memory for heap. These pages must be attached to logical pages
+    2 and 3 of the running process.
+    
+    
+    
+Process Table
+	Every process has an entry in the process table where the meta-data of each process is stored.
+	The process table starts at page 56 and has space for 16 entries of 16 words each. 
+	User stack pointer (UPTR) corresponds to word 13
+	The "User Area Page Number" corresponds to word 11.
+	The process id is stored in word 1 of the process table.
+	The user area page contains the kernel stack corresponding to the user program and some other data related to the process.
+	The KPTR register stores the offset of the kernel stack within the user area. This is to allow OS to relocate the user area.
+	When executing in user mode, the kernel stack is empty and hence the KPTR value is assumed to be zero. 
+	
+	
+Handling interrupt
+	The interrupt handler is called as follows
+		The address of the next instruction is pushed onto the stack (ip + 2). (The SP also gets incremented by 2).
+		The OS mode is switched to the priveledged mode.
+		Switch from user stack to kernel stack. This involves saving the SP to UPTR and then setting it to 
+		(user area page number *512 - 1 ).
+		Now save the user register using BACKUP
+		Start execution of interrupt routine code
+	The control is returned back to the previously executing code as follow 
+		Using RESTORE, restore the status of the user's registers
+		Load the SP from UPTR
+		Transfer the control back to the user program
+		
+
+System Status Table 
+	System status table stores the process id of each running process in the system
+	The second entry in the system status table (ie [SYSTEM_STATUS_TABLE + 1]) must store the process id of the currently
+	running user program
+
+	

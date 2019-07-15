@@ -1,0 +1,52 @@
+//read syscall interrupt handler (int=6)
+
+//setting the mode flag in the process table of the current process table to the syscall number for read (6)
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 6;
+
+//calculating the physical address of the user SP
+alias userSP R0;
+userSP = [PAGE_TABLE_BASE + 20 * [SYSTEM_STATUS_TABLE + 1] + 2 * SP / 512] * 512 + SP % 512;
+
+//switching to kernel stack
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13] = SP;
+SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 11] * 512 - 1;
+
+//retrieving the file descriptor from the user stack
+alias fileDescriptor R1;
+fileDescriptor = [userSP - 4];
+
+//checking if the file descriptor was correct
+if(fileDescriptor != -1) then
+    [userSP - 1] = -1;
+    SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13];
+    ireturn;
+endif;
+
+//saving the registers used
+alias targetAddress R3;
+targetAddress = [userSP - 3];
+multipush(R0, R1, R3);
+
+//setting the arguments in the registers to call the device manager module
+R1 = 4;
+R2 = [SYSTEM_STATUS_TABLE + 1];
+//R3 is already storing the address of where the input is to stored
+
+//calling the device manager module
+call MOD_4;
+//there is no return value for terminal read, so we will ignore it
+
+//restoring the registers and the stack
+multipop(R0, R1, R3);
+
+//storing the return address in the user stack denoting success
+[userSP - 1] = 0;
+
+//Resetting the MODE_FLAG in the process table of the current process to 0
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 9] = 0;
+
+//restoring logical user SP
+SP = [PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16 + 13];
+
+//returning control back to the user process
+ireturn;

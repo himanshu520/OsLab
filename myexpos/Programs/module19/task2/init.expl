@@ -1,0 +1,15 @@
+int main() {
+    decl
+        int x;
+        str in, out, error;
+    enddecl
+    begin
+        out = "Program ";
+        error = "Not found";
+        x = exposcall("Write", -2, out);
+        x = exposcall("Read", -1, in);
+        x = exposcall("Exec", in);
+        x = exposcall("Write", -2, error);
+        return 0;
+    end
+}

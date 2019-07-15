@@ -1,0 +1,14 @@
+int main() {
+    decl
+        int x, ignore;
+        str out;
+    enddecl
+
+    begin
+        x = exposcall("Getpid");
+        out = "PID";
+        ignore = exposcall("Write", -2, out);
+        ignore = exposcall("Write", -2, x);
+        return 0;
+    end
+}

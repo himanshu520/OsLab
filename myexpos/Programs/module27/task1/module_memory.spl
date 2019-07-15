@@ -1,0 +1,176 @@
+//Memory Manager Module (module 2)
+
+alias functionNum R1;
+
+if(functionNum == 1) then
+
+    //GetFreePage function in the memory manager module
+    alias currentPID R2;
+    currentPID = [SYSTEM_STATUS_TABLE + 1];
+
+    //incrementing WAIT_MEM_COUNT in the system status table
+    //it specifies number of processes waiting (blocked) for memory
+    [SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] + 1;
+
+    //check MEM_FREE_COUNT to see if any page is available in the memory
+    while([SYSTEM_STATUS_TABLE + 2] == 0) do
+        //call swapOut function (1) of the pager module (6)
+        multipush(R1, R2);
+        //R1 already contains 1
+        //R2 already contains current PID
+        call MOD_6;
+        multipop(R1, R2);
+
+        //set the status of the process as WAIT_MEM
+        [PROCESS_TABLE + currentPID * 16 + 4] = WAIT_MEM;
+
+        //call the scheduler
+        multipush(R1, R2);
+        call MOD_5;
+        multipop(R1, R2);
+    endwhile;
+
+    //decrementing the WAIT_MEM_COUNT and the MEM_FREE_COUNT
+    [SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] - 1;
+    [SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1;
+
+    //loop through the memory free list to find a free memory page
+    //pages 76 - 127 are available for the user processes
+    //if a page is found increase its memory free list count and return the page number
+    alias counter R3;
+    counter = 76;
+    while(counter < 128) do
+        if([MEMORY_FREE_LIST + counter] != 0) then
+            counter = counter + 1;
+            continue;
+        endif;
+        [MEMORY_FREE_LIST + counter] = 1;
+        R0 = counter;
+        return;
+    endwhile;
+endif;
+
+
+if(functionNum == 2) then
+    //ReleasePage function of the memory manager module
+    alias toRelease R2;
+    [MEMORY_FREE_LIST + toRelease] = [MEMORY_FREE_LIST + toRelease] - 1;
+
+    //check if the entry correspoding to the page has become 0, if so increase MEM_FREE_COUNT
+    if([MEMORY_FREE_LIST + toRelease] == 0) then
+        [SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] + 1;
+    endif;
+
+    alias counter R3;
+    counter = 0;
+    while(counter < MAX_PROC_NUM) do
+        R4 = PROCESS_TABLE + counter * 16 + 4;
+        if([R4] == WAIT_MEM) then
+            [R4] = READY;
+        endif;
+        counter = counter + 1;
+    endwhile;
+    return;
+endif;
+
+
+if(functionNum == 3) then
+    //getFreeBlock function of the memory manager module
+    //searches DiskFreeList (from addresses DISK_FREE_AREA to DISK_SWAP_AREA - 1) to find a free block
+    //DISK_FREE_AREA to DISK_SWAP_AREA - 1 are disk blocks 69 to 255, which are for executable and data files
+    alias ctr R1;
+    ctr = DISK_FREE_AREA;
+    while(ctr < DISK_SWAP_AREA) do
+        if([DISK_FREE_LIST + ctr] == 0) then
+            //a free entry is found, set its diskFreeList entry to 1 and return the block number
+            [DISK_FREE_LIST + ctr] = 1;
+            R0 = ctr;
+            return;
+        endif;
+        ctr = ctr + 1;
+    endwhile;
+
+    //no free block is found, return -1
+    R0 = -1;
+    return;
+endif;
+
+
+if(functionNum == 4) then
+    //releaseBlock function of the memory manager module
+    //note that the PID is expected in register R2 and the block number in register R3
+    alias currentPID R2;
+    alias blockNum R3;
+
+    //decrease the disk free list entry corresponding to the disk block
+    [DISK_FREE_LIST + blockNum] = [DISK_FREE_LIST + blockNum] - 1;
+
+    return;
+endif;
+
+
+if(functionNum == 5) then
+    //GetCodePage function of the memory manager module
+    alias currentPID R2;
+    alias blockNum R3;
+    alias cnt R4;
+    alias ctr R5;
+    alias diskMapTable R6;
+    alias pageTable R7;
+
+    //checking to see if the block is already in the memory and being used by some other process
+    cnt = 0;
+    while(cnt < MAX_PROC_NUM) do
+        ctr = 0;
+        diskMapTable = DISK_MAP_TABLE + 10 * cnt;
+        pageTable = PAGE_TABLE_BASE + 20 * cnt;
+        while(ctr < 4) do
+            if([diskMapTable + 4 + ctr] == blockNum) then
+                if([pageTable + 9 + 2 * ctr] == "0100" || [pageTable + 9 + 2 * ctr] == "1100") then
+                    R0 = [pageTable + 8 + 2 * ctr];
+                    [MEMORY_FREE_LIST + R0] = [MEMORY_FREE_LIST + R0] + 1;
+                    return;
+                endif;
+            endif;
+            ctr = ctr + 1;
+        endwhile;
+        cnt = cnt + 1;
+    endwhile;
+
+    //getting a new page by calling GetFreePage function (1) in the memory manager module (2)
+    multipush(R1, R2, R3, R4, R5, R6, R7);
+    R1 = 1;
+    call MOD_2;
+    multipop(R1, R2, R3, R4, R5, R6, R7);
+
+    //calling diskLoad function (2) in the device manager module (4) to load the code
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7);
+    R1 = 2;
+    R4 = blockNum;
+    R3 = R0;
+    call MOD_4;
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7);
+
+    //the memory page number allocated (already stored in the register R0), is returned
+    return;
+endif;
+
+
+if(functionNum == 6) then
+    alias ctr R2;
+    ctr = DISK_SWAP_AREA;
+
+    //check the diskFreeList from the DISK_SWAP_AREA till last (512) to find a free entry
+    //if no free entry is found return -1
+    while(ctr < 512) do
+        if([DISK_FREE_LIST + ctr] == 0) then
+            [DISK_FREE_LIST + ctr] = 1;
+            R0 = ctr;
+            return;
+        endif;
+        ctr = ctr + 1;
+    endwhile;
+
+    R0 = -1;
+    return;
+endif;

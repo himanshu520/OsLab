@@ -1,0 +1,29 @@
+//disk interrupt handler (int=disk)
+
+//switching to kernel stack
+[PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1] + 13] = SP;
+SP = [PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1] + 11] * 512 - 1;
+
+//saving the context of the current process
+backup;
+
+//setting the disk status to free and changing the state of all the process waiting for the disk to READY
+[DISK_STATUS_TABLE] = 0;
+
+alias counter R1;
+alias processStatus R2;
+counter = 0;
+while(counter < MAX_PROC_NUM) do
+    processStatus = PROCESS_TABLE + 16 * counter + 4;
+    if([processStatus] == WAIT_DISK) then
+        [processStatus] = READY;
+    endif;
+    counter = counter + 1;
+endwhile;
+
+//restoring the context of the current process
+restore;
+SP = [PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1] + 13];
+
+//switching back to the user process
+ireturn;

@@ -1,0 +1,194 @@
+//fork syscall (syscall number 8 and interrupt routine 8)
+
+//setting the mode flag in the process table of the current process to system call number and switch
+//to kernel stack
+[PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1]	+ 9] = 8;
+
+[PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1]	+ 13] = SP;
+SP = [PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1] + 11] * 512 - 1;
+backup;
+
+
+//calling GetPcbEntry function (1) from the process manager module (1)
+R1 = 1;
+call MOD_1;
+
+//the index of the new process table allocated to the child is returned. -1 is returned if the process
+//table is full, if the value returned is -1, return -1 to the process executing the fork syscall
+alias newPID R0;
+
+if(newPID == -1) then
+	restore;
+	[PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1]	+ 9] = 0;
+	SP = [PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1] + 13];
+
+	//saving the return value onto the user stack
+	[[PAGE_TABLE_BASE + 20 * [SYSTEM_STATUS_TABLE + 1] + 2 * ((SP - 1) / 512)] * 512 + (SP - 1) % 512] = -1;
+	ireturn;
+endif;
+
+
+//allocating pages for the user area page and the stack for the new process by calling GetFreePage function (1)
+//of the memory manager module (2)
+alias returnValue R10;
+
+//userAreaPage
+multipush(R0);
+R1 = 1;
+call MOD_2;
+returnValue = R0;
+multipop(R0);
+[PROCESS_TABLE + 16 * newPID + 11] = returnValue;
+
+//stack
+multipush(R0);
+R1 = 1;
+call MOD_2;
+returnValue = R0;
+multipop(R0);
+[PAGE_TABLE_BASE + 20 * newPID + 16] = returnValue;
+[PAGE_TABLE_BASE + 20 * newPID + 17] = "0110";
+
+
+//stack
+multipush(R0);
+R1 = 1;
+call MOD_2;
+returnValue = R0;
+multipop(R0);
+[PAGE_TABLE_BASE + 20 * newPID + 18] = returnValue;
+[PAGE_TABLE_BASE + 20 * newPID + 19] = "0110";
+
+
+//setting up the process table for the new process (userAreaPage has already been allocated and stored
+//in the process table) also PID, PTBR and PTLR field are already initialised in the GetPcbEntry (and no
+//need to initialise input buffer)
+alias newProcT R1;
+alias curPID R2;
+alias curProcT R3;
+newProcT = PROCESS_TABLE + 16 * newPID;
+curPID = [SYSTEM_STATUS_TABLE + 1];
+curProcT = PROCESS_TABLE + 16 * curPID;
+
+[newProcT] = 0;						//TICK of the new process is set to 0
+[newProcT + 1] = newPID;			//setting the PID of the current process in the process table
+[newProcT + 2] = curPID;			//PID of the parent is stored in the PPID field of the child
+[newProcT + 3] = [curProcT + 3];	//copy UserID from the parent process table
+[newProcT + 4] = CREATED;			//setting the state of the new process
+[newProcT + 6] = [curProcT + 6];	//copy SwapFlag
+[newProcT + 7] = [curProcT + 7];	//copy inodeIndex
+[newProcT + 9] = 0;					//MODE is set to 0
+[newProcT + 10] = [curProcT + 10];	//copy UserAreaSwapFlag
+[newProcT + 12] = 0;				//KPTR is set to 0
+[newProcT + 13] = [curProcT + 13];	//copy userSP
+
+
+//copying the per-process resource table from the parent to the child (the per-process resource table is
+//stored in the last 16 entries of the userAreaPage)
+alias curResTable R4;
+alias newResTable R5;
+alias counter R6;
+curResTable = ([PROCESS_TABLE + 16 * curPID + 11] + 1) * 512 - 16;
+newResTable = ([PROCESS_TABLE + 16 * newPID + 11] + 1) * 512 - 16;
+
+counter = 0;
+while(counter < 16) do
+	[newResTable + counter] = [curResTable + counter];
+	[newResTable + counter + 1] = [curResTable + counter + 1];
+	if([newResTable + counter] == SEMAPHORE) then
+		//if the resource held is a semaphore update the corresponding count field in the semaphore table
+		alias semaphoreEntry R11;
+		semaphoreEntry = SEMAPHORE_TABLE + 4 * [newResTable + counter + 1];
+		[semaphoreEntry] = [semaphoreEntry] + 1;
+	endif;
+	if([newResTable + counter] == FILE) then
+		//if the resource held is a open file instance, update the corresponding count field in the open file table
+		alias openFileEntry R11;
+		openFileEntry = OPEN_FILE_TABLE + 4 * [newResTable + counter + 1];
+		[openFileEntry + 1] = [openFileEntry + 1] + 1;
+	endif;
+	counter = counter + 2;
+endwhile;
+
+
+//copying the per-process disk map table from the parent process to the child
+//this will copy the disk-block number correponding to the user program from the parent to the child
+//if the parent has swapped heap pages - those will also be copied by the child
+//the eXpOS architecture guarantees that the userAreaPage and the stack pages of a process are not
+//swapped during the fork, so we can even copy them (as they would be set to value -1)
+alias curDiskMapTable R4;
+alias newDiskMapTable R5;
+curDiskMapTable = DISK_MAP_TABLE + curPID * 10;
+newDiskMapTable = DISK_MAP_TABLE + newPID * 10;
+
+counter = 0;
+while(counter < 10) do
+	[newDiskMapTable + counter] = [curDiskMapTable + counter];
+	counter = counter + 1;
+endwhile;
+
+
+//copying the page table entries (except the stack entries) from parent to the child
+//also the memory free list counter of these pages is incremented by 1
+alias curPT R4;
+alias newPT R5;
+curPT = PAGE_TABLE_BASE + 20 * curPID;
+newPT = PAGE_TABLE_BASE + 20 * newPID;
+
+counter = 0;
+while(counter < 16) do
+	[newPT + counter] = [curPT + counter];
+	[newPT + counter + 1] = [curPT + counter + 1];
+	if([newPT + counter] >= 0) then
+		[MEMORY_FREE_LIST + [newPT + counter]] = [MEMORY_FREE_LIST + [newPT + counter]] + 1;
+	endif;
+	counter = counter + 2;
+endwhile;
+
+
+//copying the contents of the stack from the parent to the child
+alias curStack R4;
+alias newStack R5;
+
+curStack = [PAGE_TABLE_BASE + 20 * curPID + 16] * 512;
+newStack = [PAGE_TABLE_BASE + 20 * newPID + 16] * 512;
+counter = 0;
+while(counter < 512) do
+	[newStack + counter] = [curStack + counter];
+	counter = counter + 1;
+endwhile;
+
+curStack = [PAGE_TABLE_BASE + 20 * curPID + 18] * 512;
+newStack = [PAGE_TABLE_BASE + 20 * newPID + 18] * 512;
+counter = 0;
+while(counter < 512) do
+	[newStack + counter] = [curStack + counter];
+	counter = counter + 1;
+endwhile;
+
+
+//storing the BP value on the top of the kernel stack of the child process, this will be used by the scheduler
+[[PROCESS_TABLE + 16 * newPID + 11] * 512] = BP;
+
+
+//storing the return values for the parent (newPID) and the child (0) process in their corresponding
+//user stack
+
+//for parent
+alias userSP R4;
+alias phyUserSP R5;
+userSP = [PROCESS_TABLE + curPID * 16 + 13];
+phyUserSP = [PAGE_TABLE_BASE + 20 * curPID + 2 * ((userSP - 1) / 512)] * 512 + (userSP - 1) % 512;
+[phyUserSP] = newPID;
+
+//for child
+userSP = [PROCESS_TABLE + newPID * 16 + 13];
+phyUserSP = [PAGE_TABLE_BASE + 20 * newPID + 2 * ((userSP - 1) / 512)] * 512 + (userSP - 1) % 512;
+[phyUserSP] = 0;
+
+//resetting the MODE flag of the current process and switching back to the user stack
+[PROCESS_TABLE + 16 * curPID + 9] = 0;
+restore;
+SP = [PROCESS_TABLE + 16 * [SYSTEM_STATUS_TABLE + 1] + 13];
+
+ireturn;

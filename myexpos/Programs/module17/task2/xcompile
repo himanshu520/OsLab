@@ -1,0 +1,7 @@
+#!/bin/bash
+./expl ../Programs/module17/task2/idle.expl
+mv assemblycode.xsm ../Programs/module17/task2/idle.xsm
+./expl ../Programs/module17/task2/init.expl
+mv assemblycode.xsm ../Programs/module17/task2/init.xsm
+./expl ../Programs/module17/task2/odd.expl
+mv assemblycode.xsm ../Programs/module17/task2/odd.xsm

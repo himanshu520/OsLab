@@ -1,0 +1,223 @@
+//File Manager Module (module 3)
+
+alias returnValue R0;
+alias functionNum R1;
+
+
+if(functionNum == 1  || functionNum == 2) then
+    //BufferedWrite function and BufferedRead function
+    //Both the function has same body, except that in one a word is read from the buffer and in other word is written from a buffer
+
+    alias diskBlock R2;
+    alias diskPosition R3;
+    alias buffer R4;
+    alias curPID R5;
+    curPID = [SYSTEM_STATUS_TABLE + 1];
+
+    alias diskBuffer R6;
+    alias diskBufferEntry R7;
+    diskBuffer = diskBlock % 4;
+    diskBufferEntry = BUFFER_TABLE + 4 * diskBuffer;
+
+    //acquire disk buffer by calling AcquireBuffer function (1) in the resource manager module (0)
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7);
+    R1 = 1;
+    R2 = diskBuffer;
+    R3 = curPID;
+    call MOD_0;
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7);
+
+    if([diskBufferEntry] != diskBlock) then
+        //if the disk buffer doesn't contain the required disk block
+
+        if([diskBufferEntry + 1] == 1) then
+            //if the disk buffer is not empty and has dirty bit set, write the contents back in the disk
+            //by calling diskStore function (1) in the device manager module (4)
+            multipush(R0, R1, R2, R3, R4, R5, R6, R7);
+            R1 = 1;
+            R2 = curPID;
+            R3 = 71 + diskBuffer;
+            R4 = [diskBufferEntry];
+            call MOD_4;
+            multipop(R0, R1, R2, R3, R4, R5, R6, R7);
+        endif;
+
+        //load the disk block in the buffer and set the buffer table
+        multipush(R0, R1, R2, R3, R4, R5, R6, R7);
+        R4 = diskBlock;
+        R1 = 2;
+        R2 = curPID;
+        R3 = 71 + diskBuffer;
+        call MOD_4;
+        multipop(R0, R1, R2, R3, R4, R5, R6, R7);
+
+        [diskBufferEntry] = diskBlock;
+        [diskBufferEntry + 1] = 0;
+    endif;
+
+    if(functionNum == 2) then
+        //if it is bufferedRead function, copy the contents from the diskPosition in the buffer
+        [buffer] = [(71 + diskBuffer) * 512 + diskPosition];
+    else
+        //if it is bufferedWrite function, copy the contents from the buffer to the diskPosition
+        //and also the mark the buffer as dirty
+        [(71 + diskBuffer) * 512 + diskPosition] = buffer;
+        [diskBufferEntry + 1] = 1;
+    endif;
+
+    //release buffer by calling function 2 in resource manager module
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7);
+    R1 = 2;
+    R2 = diskBuffer;
+    R3 = curPID;
+    call MOD_0;
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7);
+
+    return;
+endif;
+
+
+if(functionNum == 3) then
+    //Open function
+
+    alias fileName R2;
+    alias curPID R3;
+    alias inodeIndex R4;
+    alias inodeEntry R5;
+    alias counter R11;
+    curPID = [SYSTEM_STATUS_TABLE + 1];
+
+    //find the inode table index of the file
+    counter = 0;
+    while(counter < MAX_FILE_NUM) do
+        if([INODE_TABLE + 16 * counter + 1] == fileName) then
+            inodeIndex = counter;
+            inodeEntry = INODE_TABLE + 16 * counter;
+            break;
+        endif;
+        counter = counter + 1;
+    endwhile;
+
+    if(counter == MAX_FILE_NUM) then
+        //the file is not found in the inode table, return -1
+        returnValue = -1;
+        return;
+    endif;
+
+    //call AcquireInode function (4) in the resource manager module (0)
+    multipush(R1, R2, R3, R4, R5, R11);
+    R1 = 4;
+    R2 = inodeIndex;
+    //R3 already contains the current PID
+    call MOD_0;
+    multipop(R1, R2, R3, R4, R5, R11);
+
+    //if locking fails (returnValue is -1) then return -1
+    if(returnValue == -1) then
+        return;
+    endif;
+
+    //if the file is executable file or the file name doesn't matches with that in the inode table return -1
+    if([inodeEntry + 1] != fileName || [inodeEntry] == EXEC) then
+        //first release inode by calling ReleaseInode function (5) in the resource manager module (0)
+        multipush(R1, R2, R3, R4, R5, R11);
+        R1 = 5;
+        R2 = inodeIndex;
+        call MOD_0;
+        multipop(R1, R2, R3, R4, R5, R11);
+
+        returnValue = -1;
+        return;
+    endif;
+
+    //finding a free OpenFileTable index
+    alias openFileIndex R6;
+    alias openFileEntry R7;
+    counter = 0;
+    while(counter < MAX_OPENFILE_NUM) do
+        if([OPEN_FILE_TABLE + 4 * counter] == -1) then
+            openFileIndex = counter;
+            openFileEntry = OPEN_FILE_TABLE + 4 * counter;
+            break;
+        endif;
+        counter = counter + 1;
+    endwhile;
+
+    if(counter == MAX_OPENFILE_NUM) then
+        //if open file table is full return -2, after releasing the inode
+        multipush(R1, R2, R3, R4, R5, R6, R7, R11);
+        R1 = 5;
+        R2 = inodeIndex;
+        call MOD_0;
+        multipop(R1, R2, R3, R4, R5, R6, R7, R11);
+
+        returnValue = -2;
+        return;
+    endif;
+
+    if(fileName == "root") then
+        //root file is treated as a special case
+        [openFileEntry] = INODE_ROOT;
+    else
+        //fill the open file table entry of the open instance
+        [openFileEntry] = inodeIndex;       //inode index
+
+        //update the file status table
+        alias fileTableEntry R8;
+        fileTableEntry = FILE_STATUS_TABLE + 4 * inodeIndex;
+        if([fileTableEntry + 1] == -1) then
+            //if the file is currently not opened any where make its file open count 1 else increment it
+            [fileTableEntry + 1] = 1;
+        else
+            [fileTableEntry + 1] = [fileTableEntry + 1] + 1;
+        endif;
+    endif;
+
+    //update the remaining entries in the open file table
+    [openFileEntry + 1] = 1;            //open instance count
+    [openFileEntry + 2] = 0;            //lseek
+
+    //call release inode and return with return value as the open file table index
+    multipush(R1, R2, R3, R4, R5, R6, R7, R11);
+    R1 = 5;
+    R2 = inodeIndex;
+    call MOD_0;
+    multipop(R1, R2, R3, R4, R5, R6, R7, R11);
+    returnValue = openFileIndex;
+    return;
+
+endif;
+
+
+if(functionNum == 4) then
+    //Close function
+    alias openFileIndex R2;     //assuming a valid openFileTable entry
+    alias openFileEntry R3;
+    alias inodeIndex R4;
+
+    openFileEntry = OPEN_FILE_TABLE + 4 * openFileIndex;
+
+    //decrementing the OpenInstanceCount
+    [openFileEntry + 1] = [openFileEntry + 1] - 1;
+    inodeIndex = [openFileEntry];
+
+    if([openFileEntry + 1] == 0) then
+        //if all the open instances of the file has been closed, invalidate the entries in the
+        //open file table and also decrement the open file count in the file status table (if file is not root)
+        [openFileEntry] = -1;
+        [openFileEntry + 1] = -1;
+        [openFileEntry + 2] = -1;
+        [openFileEntry + 3] = -1;
+        if(inodeIndex != INODE_ROOT) then
+            alias fileTableEntry R5;
+            fileTableEntry = FILE_STATUS_TABLE + 4 * inodeIndex;
+            [fileTableEntry + 1] = [fileTableEntry + 1] - 1;
+            if([fileTableEntry + 1] == 0) then
+                //if the open file count becomes 0, make it -1
+                [fileTableEntry + 1] = -1;
+            endif;
+        endif;
+    endif;
+
+    return;
+endif;

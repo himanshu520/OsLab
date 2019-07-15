@@ -1,0 +1,65 @@
+//Memory Manager Module (module 2)
+alias functionNum R1;
+
+if(functionNum == 1) then
+    //GetFreePage function in the memory manager module
+    alias currentPID R2;
+
+    //incrementing WAIT_MEM_COUNT in the system status table
+    //it specifies number of processes waiting (blocked) for memory
+    [SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] + 1;
+
+    //check MEM_FREE_COUNT to see if any page is available in the memory
+    while([SYSTEM_STATUS_TABLE + 2] == 0) do
+        //set the status of the process as WAIT_MEM
+        [PROCESS_TABLE + currentPID * 16 + 4] = WAIT_MEM;
+
+        //call the scheduler
+        multipush(R1, R2);
+        call MOD_5;
+        multipop(R1, R2);
+    endwhile;
+    //decrementing the WAIT_MEM_COUNT and the MEM_FREE_COUNT
+    [SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] - 1;
+    [SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1;
+
+    //loop through the memory free list to find a free memory page
+    //pages 76 - 127 are available for the user processes
+    //if a page is found increase its memory free list count and return the page number
+    alias counter R3;
+    counter = 76;
+    while(counter < 128) do
+        if([MEMORY_FREE_LIST + counter] != 0) then
+            counter = counter + 1;
+            continue;
+        endif;
+        [MEMORY_FREE_LIST + counter] = 1;
+        R0 = counter;
+        counter = counter + 1;
+        return;
+    endwhile;
+
+
+else if(functionNum == 2) then
+    //ReleasePage function of the memory manager module
+    alias toRelease R2;
+    [MEMORY_FREE_LIST + toRelease] = [MEMORY_FREE_LIST + toRelease] - 1;
+
+    //check if the entry correspoding to the page has become 0, if so increase MEM_FREE_COUNT
+    if([MEMORY_FREE_LIST + toRelease] == 0) then
+        [SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] + 1;
+    endif;
+
+    alias counter R3;
+    counter = 0;
+    while(counter < MAX_PROC_NUM) do
+        R4 = PROCESS_TABLE + counter * 16 + 4;
+        if([R4] == WAIT_MEM) then
+            [R4] = READY;
+        endif;
+        counter = counter + 1;
+    endwhile;
+    return;
+
+endif;
+endif;

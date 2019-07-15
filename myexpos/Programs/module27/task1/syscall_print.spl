@@ -1,0 +1,180 @@
+//print syscall (syscall number 5) (interrupt handler 7)
+//Link - http://exposnitc.github.io/os_design-files/write.html
+//Arguments - filedescriptor, buffer (string/integer variable)
+//output - 0 (success), -1 (filedescriptor is invalid), -2 (no disk space / file full), -3 (file access denied)
+
+alias curPID R0;
+alias curProcT R1;
+alias curPT R2;
+alias userSP R3;
+alias returnValue R4;
+
+curPID = [SYSTEM_STATUS_TABLE + 1];
+curProcT = PROCESS_TABLE + 16 * curPID;
+curPT = PAGE_TABLE_BASE + 20 * curPID;
+userSP = SP;
+returnValue = [curPT + 2 * ((userSP - 1) / 512)] * 512 + (userSP - 1) % 512;
+
+//setting the MODE to syscall number and also switching to kernel stack
+[curProcT + 9] = 5;
+[curProcT + 13] = userSP;
+SP = [curProcT + 11] * 512 - 1;
+
+//reading the arguments
+alias fileDescriptor R5;
+alias toWrite R6;
+fileDescriptor = [[curPT + 2 * ((userSP - 4) / 512)] * 512 + (userSP - 4) % 512];
+toWrite = [[curPT + 2 * ((userSP - 3) / 512)] * 512 + (userSP - 3) % 512];
+
+
+if(fileDescriptor == -2) then
+    //if we have to write to the terminal
+
+    //call terminal write function (3) from the device manager module (module 4)
+    multipush(R0, R1, R2, R3, R4, R5, R6);
+    R1 = 3;
+    R2 = curPID;
+    R3 = toWrite;
+    call MOD_4;
+    multipop(R0, R1, R2, R3, R4, R5, R6);
+
+    //switch back to user stack, reset process mode and return 0
+    [curProcT + 9] = 0;
+    SP = [curProcT + 13];
+    [returnValue] = 0;
+    ireturn;
+
+else
+    //if we have to write to a file
+    alias resTable R7;
+    resTable = ([curProcT + 11] + 1) * 512 - 16;
+
+    if(fileDescriptor < 0 || fileDescriptor > 7 || [resTable + 2 * fileDescriptor] != FILE) then
+        //the file descriptor is invalid, return -1
+        [curProcT + 9] = 0;
+        SP = [curProcT + 13];
+        [returnValue] = -1;
+        ireturn;
+    endif;
+
+    //finding the open file index and inode index corresponding to the file descriptor
+    alias openFileIndex R8;
+    alias inodeIndex R9;
+    alias inodeEntry R10;
+    openFileIndex = [resTable + 2 * fileDescriptor + 1];
+    inodeIndex = [OPEN_FILE_TABLE + 4 * openFileIndex];
+    inodeEntry = INODE_TABLE + 16 * inodeIndex;
+
+    //if the permission to the file is set to exclusive, checking if the current user is the owner
+    //if not returning -3
+    if([inodeEntry + 4] == 0 && [curProcT + 3] != [inodeEntry + 3]) then
+        [curProcT + 9] = 0;
+        SP = [curProcT + 13];
+        [returnValue] = -3;
+        ireturn;
+    endif;
+
+    //acquire the inode corresponding to inodeIndex by calling AcquireInode function (4) in resource
+    //manager module (0)
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+    R1 = 4;
+    R2 = inodeIndex;
+    R3 = curPID;
+    call MOD_0;
+
+    if(R0 == -1) then
+        //if AcquireInode fails, then return -1
+        multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+        [curProcT + 9] = 0;
+        SP = [curProcT + 13];
+        [returnValue] = -1;
+        ireturn;
+    endif;
+
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10);
+
+    //get lseek position from the open file table
+    alias lseekAddr R11;
+    lseekAddr = OPEN_FILE_TABLE + 4 * openFileIndex + 2;
+
+    if([lseekAddr] == MAX_FILE_SIZE) then
+        //if the seek pointer of the file has already reached its maximum allowed position, then we cannot write
+        //anything more in the file. We will return -2 in this case
+        [curProcT + 9] = 0;
+        SP = [curProcT + 13];
+        [returnValue] = -2;
+        ireturn;
+    endif;
+
+    if([lseekAddr] % 512 == 0 && [inodeEntry + 2] == [lseekAddr]) then
+        //if we have already reached the end of a block and no physical block has been allocated for the next logical
+        //block of the file, we will allocate a new block
+
+        //call GetFreeBlock function (3) of the memory manager module (2)
+        alias newBlock R12;
+        multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11);
+        R1 = 3;
+        call MOD_2;
+        newBlock = R0;
+        multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11);
+
+
+        if(newBlock == -1) then
+            //if no block is allocated, return -2, after releasing the inode
+            //to release inode call ReleaseInode function (5) of the resource manager module (0)
+            multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11);
+            R1 = 5;
+            R2 = inodeIndex;
+            R3 = curPID;
+            call MOD_0;
+            multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11);
+
+            [curProcT + 9] = 0;
+            SP = [curProcT + 13];
+            [returnValue] = -2;
+            ireturn;
+        endif;
+
+        //updating the inode table
+        [inodeEntry + 8 + [lseekAddr] / 512] = newBlock;
+
+    endif;
+
+    //finding the disk block number and position in the block where the value has to be written
+    alias diskBlock R12;
+    alias diskPosition R13;
+    diskBlock = [inodeEntry + 8 + [lseekAddr] / 512];
+    diskPosition = [lseekAddr] % 512;
+
+    //writing the argument to be written by calling buffered write function (1) of file manager module (3)
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12);
+    R1 = 1;
+    R2 = diskBlock;
+    R3 = diskPosition;
+    R4 = toWrite;
+    call MOD_3;
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12);
+
+    //if lseek equals fileSize, update the file size in the inode table and the root file
+    //regardless of the above increment lseek
+    if([lseekAddr] == [inodeEntry + 2]) then
+        [inodeEntry + 2] = [inodeEntry + 2] + 1;
+        [ROOT_FILE + 8 * inodeIndex + 1] = [ROOT_FILE + 8 * inodeIndex + 1] + 1;
+    endif;
+    [lseekAddr] = [lseekAddr] + 1;
+
+    //releasing the lock by calling release inode function (5) in the resource manager module (0)
+    multipush(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12);
+    R1 = 5;
+    R2 = inodeIndex;
+    R3 = curPID;
+    call MOD_0;
+    multipop(R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12);
+
+    //returning 0, after resetting the process mode and switching to user stack
+    [curProcT + 9] = 0;
+    SP = [curProcT + 13];
+    [returnValue] = 0;
+    ireturn;
+
+endif;

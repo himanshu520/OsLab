@@ -1,0 +1,18 @@
+#!/bin/bash
+./spl ../Programs/module20/task3/haltprog.spl
+./spl ../Programs/module20/task3/int_console.spl
+./spl ../Programs/module20/task3/int_disk.spl
+./spl ../Programs/module20/task3/int_timer.spl
+./spl ../Programs/module20/task3/int_exhandler.spl
+./spl ../Programs/module20/task3/module_boot.spl
+./spl ../Programs/module20/task3/module_process.spl
+./spl ../Programs/module20/task3/module_memory.spl
+./spl ../Programs/module20/task3/module_device.spl
+./spl ../Programs/module20/task3/module_resource.spl
+./spl ../Programs/module20/task3/module_scheduler.spl
+./spl ../Programs/module20/task3/os_startup.spl
+./spl ../Programs/module20/task3/syscall_exit.spl
+./spl ../Programs/module20/task3/syscall_print.spl
+./spl ../Programs/module20/task3/syscall_read.spl
+./spl ../Programs/module20/task3/syscall_exec.spl
+./spl ../Programs/module20/task3/syscall_fork.spl
